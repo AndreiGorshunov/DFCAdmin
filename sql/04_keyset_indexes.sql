@@ -1,59 +1,34 @@
 /* =============================================================================
-   DFC 2026 — индексы под листинг регистраций (keyset + фильтры) и опционально FTS
+   DFC 2026 — Вариант B: денормализация фамилии регистранта + индексы листинга
    Target DB: [dfc.EventRegistration]
    -----------------------------------------------------------------------------
-   Контекст: листинг сортируется по Users.LastName, потом EventRegistrations.RegistrationId.
-   Это порядок ЧЕРЕЗ ДВЕ ТАБЛИЦЫ — отсюда выбор вариантов ниже.
+   Листинг регистраций сортируется по фамилии регистранта, затем RegistrationId.
+   Чтобы keyset ложился ОДНИМ seek'ом на таблицу регистраций (без джойна к Users
+   на сортировке), держим фамилию денормализованно в EventRegistrations.RegistrantLastName.
+
+   Колонка объявлена в 01_schema.sql и заполняется в 03_bulk_load. Этот скрипт:
+     1) добивает колонку, если её нет (для БД, созданных старой схемой);
+     2) бэкфилл NULL-ов из Users;
+     3) делает колонку NOT NULL (после бэкфилла — иначе EF упадёт на NULL);
+     4) строит keyset-индекс (RegistrantLastName, RegistrationId);
+     5) (опционально) full-text индекс для поиска по именам.
+
+   Порядок запуска: 01 (схема) -> 03 (bulk) -> 04 (этот файл).
+
+   Поддержание актуальности при правке имени делается в приложении
+   (AdminWriteService.UpdateUser/UpdateRegistrant — set-based ExecuteUpdate
+   проставляет RegistrantLastName во всех регистрациях персоны в одной транзакции).
    ============================================================================= */
 
 USE [dfc.EventRegistration];
 GO
 
-/* =============================================================================
-   ВАРИАНТ A — без изменения схемы (запускается как есть)
-   -----------------------------------------------------------------------------
-   Покрывает фильтры по событию/статусу и ускоряет джойн+порядок по фамилии.
-   Keyset корректен, но seek через JOIN оптимизатор не всегда свернёт в один
-   проход (LastName в Users, RegistrationId в EventRegistrations).
-   ============================================================================= */
-/*
--- Фильтры EventId/Status + покрытие частых колонок (без обращения к куче).
-IF NOT EXISTS (SELECT 1 FROM sys.indexes
-               WHERE name = N'IX_ER_Event_Status'
-                 AND object_id = OBJECT_ID(N'dbo.EventRegistrations'))
-CREATE INDEX IX_ER_Event_Status
-    ON dbo.EventRegistrations (EventId, Status)
-    INCLUDE (UserId, GroupCode, RegistrationDate, QRCode);
-GO
-
--- Порядок/поиск по фамилии: ORDER BY LastName + обратный джойн к Users.
-IF NOT EXISTS (SELECT 1 FROM sys.indexes
-               WHERE name = N'IX_Users_LastName'
-                 AND object_id = OBJECT_ID(N'dbo.Users'))
-CREATE INDEX IX_Users_LastName
-    ON dbo.Users (LastName, UserId)
-    INCLUDE (FirstName, Email, Phone);
-GO
-*/
-
-/* =============================================================================
-   ВАРИАНТ B — рекомендуется для read-heavy листинга (денормализация фамилии)
-   -----------------------------------------------------------------------------
-   Кладём LastName прямо в EventRegistrations -> keyset ложится ОДНИМ seek'ом
-   на таблицу листинга: индекс (RegistrantLastName, RegistrationId).
-   Цена: поле надо поддерживать в актуальном состоянии (см. ниже).
-
-   ВНИМАНИЕ: чтобы EF реально это использовал, нужно переключить сортировку/seek
-   на денормализованную колонку (см. блок "Изменения в коде" в конце файла).
-   Поэтому Вариант B по умолчанию ЗАКОММЕНТИРОВАН — включай осознанно.
-   ============================================================================= */
-
-
+/* 1. Колонка — идемпотентно (на случай БД без неё). ------------------------- */
 IF COL_LENGTH(N'dbo.EventRegistrations', N'RegistrantLastName') IS NULL
     ALTER TABLE dbo.EventRegistrations ADD RegistrantLastName nvarchar(100) NULL;
 GO
 
--- Бэкфилл существующих строк
+/* 2. Бэкфилл из Users (строки, добавленные до появления колонки). ----------- */
 UPDATE er
 SET    er.RegistrantLastName = u.LastName
 FROM   dbo.EventRegistrations er
@@ -61,32 +36,29 @@ JOIN   dbo.Users u ON u.UserId = er.UserId
 WHERE  er.RegistrantLastName IS NULL;
 GO
 
--- Индекс под keyset одним seek'ом
+/* 3. NOT NULL — строго после бэкфилла. ------------------------------------- */
+ALTER TABLE dbo.EventRegistrations ALTER COLUMN RegistrantLastName nvarchar(100) NOT NULL;
+GO
+
+/* 4. Keyset-индекс: один seek на листинг (порядок = ORDER BY кода). --------- */
 IF NOT EXISTS (SELECT 1 FROM sys.indexes
                WHERE name = N'IX_ER_Keyset'
                  AND object_id = OBJECT_ID(N'dbo.EventRegistrations'))
-CREATE INDEX IX_ER_Keyset
-    ON dbo.EventRegistrations (RegistrantLastName, RegistrationId)
-    INCLUDE (EventId, UserId, GroupCode, Status);
+    CREATE INDEX IX_ER_Keyset
+        ON dbo.EventRegistrations (RegistrantLastName, RegistrationId)
+        INCLUDE (EventId, UserId, GroupCode, Status);
 GO
 
--- Поддержание актуальности:
---   * проще всего — проставлять RegistrantLastName из Users на запись регистрации
---     (в приложении, в той же транзакции);
---   * если фамилии редактируются в Users и это должно отражаться в листинге —
---     триггер AFTER UPDATE на Users(LastName), синхронизирующий EventRegistrations.
-
-
 /* =============================================================================
-   ОПЦИОНАЛЬНО — full-text поиск по ИМЕНАМ (ускоряет поиск вместо LIKE %term%)
-   -----------------------------------------------------------------------------
-   Email в FTS не кладём: токенизация по '@' и '.' ведёт себя странно.
-   Для email лучше сарджабельный префикс  Email LIKE @q + '%'  по IX_Users_Email.
-   Использование CONTAINS требует отдельного патча поиска (EF.FromSql) — скажи,
-   добавлю; EF.Functions.Contains это всё ещё LIKE, не CONTAINS.
+   ОПЦИОНАЛЬНО — full-text поиск по именам (быстрее, чем LIKE %term% на больших
+   объёмах). Email в FTS не кладём: токенизация по '@'/'.' ведёт себя странно —
+   для email лучше сарджабельный префикс  Email LIKE @q + '%'  по UX_Users_Email.
+
+   ВНИМАНИЕ: чтобы это реально использовалось, поиск в коде нужно перевести на
+   CONTAINS через EF.FromSql (EF.Functions.Contains транслируется в LIKE, не в
+   полнотекстовый CONTAINS). Сейчас поиск в RegistrantQueryService — токенизированный
+   LIKE по Users; FTS-индекс ниже создаётся «про запас».
    ============================================================================= */
-
-
 IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'dfc_ft')
     CREATE FULLTEXT CATALOG dfc_ft AS DEFAULT;
 GO
@@ -94,18 +66,6 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes
                WHERE object_id = OBJECT_ID(N'dbo.Users'))
     CREATE FULLTEXT INDEX ON dbo.Users (FirstName, LastName)
-        KEY INDEX PK_Users          -- уникальный single-column индекс на UserId
+        KEY INDEX PK_Users               -- уникальный single-column индекс на UserId
         WITH CHANGE_TRACKING = AUTO;
 GO
-
-
-/* =============================================================================
-   ИЗМЕНЕНИЯ В КОДЕ ДЛЯ ВАРИАНТА B (если включаешь денормализацию)
-   -----------------------------------------------------------------------------
-   1) В сущность EventRegistration добавить:  public string RegistrantLastName { get; set; }
-   2) В Query(...) проекцию LastName брать из r.RegistrantLastName (не r.User.LastName).
-   3) В ApplySort(...) дефолтную ветку и SeekAfter(...) оставить как есть —
-      они работают по RegistrantRow.LastName, который теперь маппится на
-      денормализованную колонку, и seek уходит одним проходом по IX_ER_Keyset.
-   Поиск (LIKE/FTS) по-прежнему по Users — это ок, фильтр и порядок развязаны.
-   ============================================================================= */

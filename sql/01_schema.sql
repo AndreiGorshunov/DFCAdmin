@@ -125,6 +125,7 @@ BEGIN
         Status                    TINYINT          NOT NULL
             CONSTRAINT DF_EventRegistrations_Status DEFAULT (0),
         QRCode                    NVARCHAR(256)    NULL,
+        RegistrantLastName        NVARCHAR(100)    NULL,   -- денормализация фамилии регистранта (Вариант B; 04 делает NOT NULL + IX_ER_Keyset)
 
         CONSTRAINT PK_EventRegistrations PRIMARY KEY CLUSTERED (RegistrationId),
         CONSTRAINT FK_EventRegistrations_Events

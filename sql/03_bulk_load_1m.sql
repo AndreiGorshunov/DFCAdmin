@@ -147,6 +147,7 @@ INSERT INTO #Idx VALUES
  (N'EventRegistrations',        N'IX_EventRegistrations_EventId'),
  (N'EventRegistrations',        N'IX_EventRegistrations_UserId'),
  (N'EventRegistrations',        N'UX_EventRegistrations_QRCode'),
+ (N'EventRegistrations',        N'IX_ER_Keyset'),
  (N'RegistrationParticipants',  N'IX_RegistrationParticipants_RegistrationId'),
  (N'RegistrationParticipants',  N'IX_RegistrationParticipants_FamilyMemberId'),
  (N'RegistrationParticipants',  N'IX_RegistrationParticipants_EventId');
@@ -305,15 +306,17 @@ BEGIN TRY
         INSERT INTO dbo.EventRegistrations WITH (TABLOCK)
             (EventId, UserId, GroupCode,
              EmergencyContactFirstName, EmergencyContactLastName, EmergencyContactPhone,
-             RegistrationDate, Status, QRCode)
+             RegistrationDate, Status, QRCode, RegistrantLastName)
         SELECT s.EventId, s.UserId,
                CASE WHEN (s.h % 10) < 4 THEN CONCAT(N'GRP-', FORMAT(s.UserId, '0000000')) END,
                ef.nm, el.nm,
                CONCAT(N'+97155', RIGHT(N'0000000' + CAST(s.h % 10000000 AS nvarchar(7)), 7)),
                DATEADD(DAY, s.h % 80, s.RegOpen),                                  -- open + 0..80 (< StartDate)
                s.h % 4,                                                            -- Status 0..3
-               NULL
+               NULL,
+               u.LastName                                                          -- денормализация: фамилия регистранта (Вариант B)
         FROM Sel s
+        JOIN dbo.Users u ON u.UserId = s.UserId
         JOIN #First ef ON ef.i = (s.h / 7)  % @FirstN
         JOIN #Last  el ON el.i = (s.h / 13) % @LastN;
 

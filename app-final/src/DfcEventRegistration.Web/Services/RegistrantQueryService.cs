@@ -31,10 +31,11 @@ public class RegistrantQueryService
 
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
-            // TODO !!!!!!
-            // Токенизация: каждое слово ищется по полям (AND между словами, OR между полями),
-            // поэтому "John Smith" находит человека. LIKE %token% не sargable -> скан (как и было);
-            // на миллионах строк масштабный ответ — full-text (см. keyset_indexes.sql).
+            // Поиск — по АКТУАЛЬНЫМ данным Users (имя/фамилия/email/телефон), токенизированно:
+            // каждое слово ищется по полям (AND между словами, OR между полями) -> "John Smith" находит.
+            // Намеренно НЕ по денормализованной RegistrantLastName: поиск развязан с сортировкой/keyset.
+            // LIKE %token% не sargable -> скан; на больших объёмах ускоряется через full-text
+            // (FTS-индекс на Users уже создан в 04_keyset_indexes.sql, но требует перевода на CONTAINS).
             foreach (var token in f.Q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(4))
             {
                 var t = token;
@@ -42,7 +43,6 @@ public class RegistrantQueryService
                     r.User.Email.Contains(t) ||
                     r.User.FirstName.Contains(t) ||
                     r.User.LastName.Contains(t) ||
-                    //r.RegistrantLastName.Contains(t) || // если включаешь денормализацию
                     (r.User.Phone != null && r.User.Phone.Contains(t)));
             }
         }
@@ -60,7 +60,9 @@ public class RegistrantQueryService
             RegistrationId = r.RegistrationId,
             Email = r.User.Email,
             FirstName = r.User.FirstName,
-            LastName = r.User.LastName,
+            // Денормализация (Вариант B): сортировка/keyset идут по EventRegistrations.RegistrantLastName
+            // -> один seek по IX_ER_Keyset. Значение синхронизируется при правке имени персоны (AdminWriteService).
+            LastName = r.RegistrantLastName,
             Mobile = r.User.Phone,
             GroupCode = r.GroupCode,
             EventName = r.Event.Name,

@@ -55,7 +55,7 @@ public class EventRegistration
     public DateTime RegistrationDate { get; set; }
     public RegistrationStatus Status { get; set; }
     public string? QRCode { get; set; }
-    //public string RegistrantLastName { get; set; } // если включаешь денормализацию
+    public string RegistrantLastName { get; set; } = ""; // денормализация (Вариант B): синхронизируется из Users.LastName при записи
 
     // Навигации (нужны для фильтрации по пользователю и подсчёта детей)
     public User User { get; set; } = null!;

@@ -38,6 +38,7 @@ public class AppDbContext : DbContext
             e.ToTable("EventRegistrations", "dbo");
             e.HasKey(x => x.RegistrationId);
             e.Property(x => x.Status); // enum:byte -> tinyint, маппится автоматически
+            e.Property(x => x.RegistrantLastName).HasMaxLength(100); // денормализованная фамилия (Вариант B, синхрон из Users)
 
             e.HasOne(x => x.User)
              .WithMany()
