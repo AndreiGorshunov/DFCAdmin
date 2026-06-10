@@ -1,0 +1,132 @@
+@page
+@model DfcEventRegistration.Web.Pages.Children.IndexModel
+@using DfcEventRegistration.Web.Models
+@{
+    ViewData["Title"] = "Children";
+
+    var baseRoute = new Dictionary<string, string>();
+    if (!string.IsNullOrWhiteSpace(Model.Q)) baseRoute["Q"] = Model.Q!;
+    if (Model.EventId is Guid ev) baseRoute["EventId"] = ev.ToString();
+    if (Model.Age is AgeBand ab) baseRoute["Age"] = ab.ToString();
+    baseRoute["PageSize"] = Model.PageSize.ToString();
+
+    Dictionary<string, string> Sortable(string col)
+    {
+        var d = new Dictionary<string, string>(baseRoute);
+        d["Sort"] = col;
+        d["Dir"] = Model.NextDir(col);
+        return d;
+    }
+
+    var pagerBase = new Dictionary<string, string>(baseRoute);
+    if (!string.IsNullOrEmpty(Model.Sort)) pagerBase["Sort"] = Model.Sort!;
+    if (!string.IsNullOrEmpty(Model.Dir)) pagerBase["Dir"] = Model.Dir!;
+}
+
+<h1>Children</h1>
+<p class="muted small">Грейн = участник-ребёнок: одна строка = один ребёнок на одном событии (а не регистрация). Возраст — на дату начала события.</p>
+
+<form method="get" class="filters">
+    <input type="text" name="Q" value="@Model.Q" placeholder="Child or parent name / email…" />
+
+    <select name="EventId">
+        <option value="">— All events —</option>
+        @foreach (var e in Model.Events)
+        {
+            <option value="@e.Id" selected="@(Model.EventId == e.Id)">@e.Name</option>
+        }
+    </select>
+
+    <select name="Age">
+        <option value="">— Any age —</option>
+        <option value="Under13" selected="@(Model.Age == AgeBand.Under13)">Below 13</option>
+        <option value="From13" selected="@(Model.Age == AgeBand.From13)">13 and above</option>
+    </select>
+
+    <select name="PageSize">
+        @foreach (var n in new[] { 25, 50, 100, 200 })
+        {
+            <option value="@n" selected="@(Model.PageSize == n)">@n / page</option>
+        }
+    </select>
+
+    <button type="submit">Apply</button>
+    <a class="btn-secondary" asp-page="/Children/Index">Reset</a>
+    <button type="button" id="childCountBtn" class="btn-secondary">Count ▷</button>
+</form>
+
+<p class="muted" id="childCountResult" aria-live="polite"></p>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th><a asp-page="/Children/Index" asp-all-route-data='Sortable("child")'>Child@(Model.SortIndicator("child"))</a></th>
+            <th class="num"><a asp-page="/Children/Index" asp-all-route-data='Sortable("age")'>Age@(Model.SortIndicator("age"))</a></th>
+            <th><a asp-page="/Children/Index" asp-all-route-data='Sortable("event")'>Event@(Model.SortIndicator("event"))</a></th>
+            <th><a asp-page="/Children/Index" asp-all-route-data='Sortable("tshirt")'>T-shirt@(Model.SortIndicator("tshirt"))</a></th>
+            <th><a asp-page="/Children/Index" asp-all-route-data='Sortable("parent")'>Parent (registrant)@(Model.SortIndicator("parent"))</a></th>
+            <th>Email</th>
+            <th>Group</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="8" class="muted center">No children match the filters.</td></tr>
+        }
+        @foreach (var c in Model.Rows)
+        {
+            <tr>
+                <td>@c.ChildFirstName @c.ChildLastName</td>
+                <td class="num">@(c.Age?.ToString() ?? "—")</td>
+                <td>@c.EventName</td>
+                <td>@c.TshirtSize</td>
+                <td>@c.ParentFirstName @c.ParentLastName</td>
+                <td>@c.ParentEmail</td>
+                <td>@c.GroupCode</td>
+                <td><a asp-page="/Registrants/Edit" asp-route-id="@c.RegistrationId">Registration</a></td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<div class="pager">
+    @if (Model.PageNo > 1)
+    {
+        var prev = new Dictionary<string, string>(pagerBase) { ["PageNo"] = (Model.PageNo - 1).ToString() };
+        <a asp-page="/Children/Index" asp-all-route-data="prev">‹ Prev</a>
+    }
+    <span>Page @Model.PageNo</span>
+    @if (Model.HasNext)
+    {
+        var next = new Dictionary<string, string>(pagerBase) { ["PageNo"] = (Model.PageNo + 1).ToString() };
+        <a asp-page="/Children/Index" asp-all-route-data="next">Next ›</a>
+    }
+</div>
+
+<script>
+    document.getElementById('childCountBtn').addEventListener('click', async function () {
+        var form = document.querySelector('form.filters');
+        var params = new URLSearchParams();
+        params.set('handler', 'Count');
+
+        var q = form.querySelector('[name="Q"]').value.trim();
+        var eventId = form.querySelector('[name="EventId"]').value;
+        var age = form.querySelector('[name="Age"]').value;
+        if (q) params.set('Q', q);
+        if (eventId) params.set('EventId', eventId);
+        if (age) params.set('Age', age);
+
+        var out = document.getElementById('childCountResult');
+        out.textContent = 'Counting…';
+        try {
+            var r = await fetch('?' + params.toString(), { headers: { 'Accept': 'application/json' } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            var n = await r.json();
+            out.textContent = n.toLocaleString() + ' children match the current filters.';
+        } catch (e) {
+            out.textContent = 'Count failed — try again.';
+        }
+    });
+</script>

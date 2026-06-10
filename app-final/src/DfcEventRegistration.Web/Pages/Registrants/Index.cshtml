@@ -68,8 +68,8 @@
 
     <select name="ParticipantType">
         <option value="">— Adults &amp; children —</option>
-        <option value="Adults" selected="@(Model.ParticipantType == ParticipantKind.Adults)">Adults only</option>
-        <option value="Children" selected="@(Model.ParticipantType == ParticipantKind.Children)">Children only</option>
+        <option value="Adults" selected="@(Model.ParticipantType == ParticipantKind.Adults)">No children</option>
+        <option value="Children" selected="@(Model.ParticipantType == ParticipantKind.Children)">With children</option>
     </select>
 
     <select name="PageSize">

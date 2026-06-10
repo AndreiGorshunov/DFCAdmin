@@ -41,6 +41,36 @@ public enum ParticipantKind
     Children
 }
 
+/// <summary>Возрастная группа ребёнка (на дату начала события).</summary>
+public enum AgeBand
+{
+    Under13,
+    From13
+}
+
+/// <summary>Строка вкладки «Children» — грейн = участник-ребёнок (RegistrationParticipants, FamilyMemberId != null).</summary>
+public class ChildRow
+{
+    public long ParticipantId { get; set; }
+    public long RegistrationId { get; set; }
+    public string ChildFirstName { get; set; } = "";
+    public string ChildLastName { get; set; } = "";
+    public int? Age { get; set; }
+    public string EventName { get; set; } = "";
+    public string? TshirtSize { get; set; }
+    public string ParentFirstName { get; set; } = "";
+    public string ParentLastName { get; set; } = "";
+    public string ParentEmail { get; set; } = "";
+    public string? GroupCode { get; set; }
+}
+
+public class ChildFilter
+{
+    public string? Q { get; set; }
+    public Guid? EventId { get; set; }
+    public AgeBand? Age { get; set; }
+}
+
 public record EventOption(Guid Id, string Name);
 
 public class TshirtReportRow

@@ -52,22 +52,86 @@ DECLARE @OrigRecovery sysname =
 -------------------------------------------------------------------------------
 DROP TABLE IF EXISTS #First, #Last, #Child, #Events, #Idx;
 
-CREATE TABLE #First (i int PRIMARY KEY, nm nvarchar(50));
-INSERT INTO #First VALUES
- (0,N'Ahmed'),(1,N'Mohammed'),(2,N'Omar'),(3,N'Khalid'),(4,N'Yusuf'),(5,N'Saeed'),
- (6,N'Fatima'),(7,N'Aisha'),(8,N'Layla'),(9,N'Noura'),(10,N'Mariam'),(11,N'Hessa'),
- (12,N'John'),(13,N'Sarah'),(14,N'Raj'),(15,N'Priya');
+-- Индексы 0..N-1 проставляются через ROW_NUMBER (без ручной нумерации,
+-- никаких дырок -> модуль-джойн i = hash % N всегда попадает в строку).
 
+CREATE TABLE #First (i int PRIMARY KEY, nm nvarchar(50));
+INSERT INTO #First (i, nm)
+SELECT ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1, v.nm
+FROM (VALUES
+ (N'James'),(N'Olivia'),(N'Liam'),(N'Emma'),(N'Noah'),(N'Sophia'),(N'Lucas'),(N'Mia'),(N'Henry'),(N'Charlotte'),
+ (N'Oliver'),(N'Amelia'),(N'Leo'),(N'Hannah'),(N'Daniel'),(N'Laura'),(N'Thomas'),(N'Anna'),(N'Felix'),(N'Clara'),
+ (N'Ivan'),(N'Natalia'),(N'Dmitri'),(N'Olga'),(N'Sergei'),(N'Elena'),(N'Mikhail'),(N'Tatiana'),(N'Andrei'),(N'Magdalena'),
+ (N'Pavel'),(N'Zofia'),(N'Tomasz'),(N'Katarzyna'),(N'Ahmed'),(N'Fatima'),(N'Mohammed'),(N'Aisha'),(N'Omar'),(N'Layla'),
+ (N'Khalid'),(N'Noura'),(N'Yusuf'),(N'Mariam'),(N'Ibrahim'),(N'Zainab'),(N'Saeed'),(N'Hana'),(N'Raj'),(N'Priya'),
+ (N'Arjun'),(N'Ananya'),(N'Vikram'),(N'Kavya'),(N'Rohan'),(N'Diya'),(N'Aditya'),(N'Meera'),(N'Sanjay'),(N'Anjali'),
+ (N'Wei'),(N'Mei'),(N'Jian'),(N'Yan'),(N'Hiroshi'),(N'Yuki'),(N'Takeshi'),(N'Sakura'),(N'Minjun'),(N'Seoyeon'),
+ (N'Haruto'),(N'Aoi'),(N'Linh'),(N'Quan'),(N'Somchai'),(N'Mali'),(N'Budi'),(N'Dewi'),(N'Siti'),(N'Arif'),
+ (N'Kwame'),(N'Amara'),(N'Chidi'),(N'Zola'),(N'Thabo'),(N'Nia'),(N'Kofi'),(N'Adaeze'),(N'Sefu'),(N'Imani'),
+ (N'Mateo'),(N'Valentina'),(N'Santiago'),(N'Isabella'),(N'Diego'),(N'Camila'),(N'Carlos'),(N'Lucia'),(N'Javier'),(N'Gabriela'),
+ (N'Aaliyah'),(N'Ezra'),(N'Idris'),(N'Freya'),(N'Aria'),(N'Mateus'),(N'Sofia'),(N'Marco'),(N'Giulia'),(N'Nikolai'),
+ (N'Astrid'),(N'Lars'),(N'Ingrid'),(N'Matteo'),(N'Elif'),(N'Emre'),(N'Yara'),(N'Tariq'),(N'Nadia'),(N'Sven')
+) v(nm);
+
+-- #Last: 120 курируемых международных фамилий + генерация компонентами
+-- (англо-локативные основы x суффиксы -> Ashford, Brookfield, Stonebridge...).
+-- UNION дедуплицирует, ROW_NUMBER -> непрерывные индексы. Итог: 1000+ уникальных.
 CREATE TABLE #Last (i int PRIMARY KEY, nm nvarchar(50));
-INSERT INTO #Last VALUES
- (0,N'AlMaktoum'),(1,N'AlNahyan'),(2,N'AlSuwaidi'),(3,N'Khan'),(4,N'Rahman'),(5,N'Hassan'),
- (6,N'Smith'),(7,N'Johnson'),(8,N'Patel'),(9,N'Sharma'),(10,N'Chen'),(11,N'Nguyen'),
- (12,N'Ibrahim'),(13,N'Saleh'),(14,N'Mansoori'),(15,N'Qassimi');
+;WITH Curated(nm) AS (
+    SELECT v.nm FROM (VALUES
+     (N'Smith'),(N'Johnson'),(N'Williams'),(N'Brown'),(N'Jones'),(N'Garcia'),(N'Miller'),(N'Davis'),(N'Rodriguez'),(N'Martinez'),
+     (N'Hernandez'),(N'Lopez'),(N'Gonzalez'),(N'Wilson'),(N'Anderson'),(N'Taylor'),(N'Moore'),(N'Jackson'),(N'Martin'),(N'Lee'),
+     (N'Perez'),(N'Thompson'),(N'White'),(N'Harris'),(N'Sanchez'),(N'Clark'),(N'Ramirez'),(N'Lewis'),(N'Robinson'),(N'Walker'),
+     (N'Young'),(N'Allen'),(N'King'),(N'Wright'),(N'Scott'),(N'Torres'),(N'Hill'),(N'Flores'),(N'Green'),(N'Adams'),
+     (N'Nelson'),(N'Baker'),(N'Hall'),(N'Rivera'),(N'Campbell'),(N'Mitchell'),(N'Carter'),(N'Roberts'),(N'Khan'),(N'Patel'),
+     (N'Sharma'),(N'Singh'),(N'Kumar'),(N'Gupta'),(N'Reddy'),(N'Rao'),(N'Mehta'),(N'Iyer'),(N'Chen'),(N'Wang'),
+     (N'Li'),(N'Zhang'),(N'Liu'),(N'Yang'),(N'Huang'),(N'Zhao'),(N'Wu'),(N'Zhou'),(N'Kim'),(N'Park'),
+     (N'Choi'),(N'Jung'),(N'Kang'),(N'Yamamoto'),(N'Tanaka'),(N'Sato'),(N'Suzuki'),(N'Takahashi'),(N'Ito'),(N'Watanabe'),
+     (N'AlMaktoum'),(N'AlNahyan'),(N'AlFarsi'),(N'Hassan'),(N'Ibrahim'),(N'Rahman'),(N'Saleh'),(N'Aziz'),(N'Karimi'),(N'Haddad'),
+     (N'Okafor'),(N'Mensah'),(N'Adebayo'),(N'Diallo'),(N'Mwangi'),(N'Banda'),(N'Achebe'),(N'Eze'),(N'Ivanov'),(N'Petrov'),
+     (N'Sokolov'),(N'Volkov'),(N'Kuznetsov'),(N'Novak'),(N'Kowalski'),(N'Nowak'),(N'Horvath'),(N'Nagy'),(N'Mueller'),(N'Schmidt'),
+     (N'Fischer'),(N'Weber'),(N'Rossi'),(N'Russo'),(N'Ferrari'),(N'Dubois'),(N'Bernard'),(N'DaSilva'),(N'Santos'),(N'Oliveira')
+    ) v(nm)
+),
+Stem(s) AS (
+    SELECT v.s FROM (VALUES
+     (N'Ash'),(N'Black'),(N'Brad'),(N'Brook'),(N'Burn'),(N'Carl'),(N'Chester'),(N'Cliff'),(N'Cross'),(N'Dun'),
+     (N'East'),(N'Ell'),(N'Fair'),(N'Glen'),(N'Green'),(N'Hart'),(N'Hay'),(N'Holl'),(N'Kirk'),(N'Lang'),
+     (N'Lock'),(N'Marsh'),(N'New'),(N'North'),(N'Oak'),(N'Pem'),(N'Red'),(N'Rich'),(N'Rock'),(N'Shel'),
+     (N'South'),(N'Stan'),(N'Stone'),(N'Sum'),(N'Thorn'),(N'Wal'),(N'West'),(N'Whit'),(N'Wood'),(N'York')
+    ) v(s)
+),
+Suf(s) AS (
+    SELECT v.s FROM (VALUES
+     (N'ford'),(N'wood'),(N'ton'),(N'ley'),(N'field'),(N'worth'),(N'dale'),(N'bury'),(N'well'),(N'stone'),
+     (N'bridge'),(N'brook'),(N'ham'),(N'gate'),(N'land'),(N'cliff'),(N'combe'),(N'croft'),(N'don'),(N'hurst'),
+     (N'mere'),(N'ridge'),(N'shaw'),(N'thorpe'),(N'vale'),(N'wick'),(N'more'),(N'side'),(N'burgh'),(N'haven')
+    ) v(s)
+),
+Generated(nm) AS (
+    SELECT s.s + u.s
+    FROM Stem s CROSS JOIN Suf u
+    WHERE LOWER(s.s) <> u.s          -- отсекаем нелепые удвоения вроде Woodwood
+),
+AllNames(nm) AS (
+    SELECT nm FROM Curated
+    UNION                            -- UNION дедуплицирует
+    SELECT nm FROM Generated
+)
+INSERT INTO #Last (i, nm)
+SELECT ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1, nm
+FROM AllNames;
 
 CREATE TABLE #Child (i int PRIMARY KEY, nm nvarchar(50));
-INSERT INTO #Child VALUES   -- часть арабской вязью: Unicode/RTL тест-данные
- (0,N'Sara'),(1,N'Yousef'),(2,N'Lina'),(3,N'Adam'),(4,N'Maya'),(5,N'Zayd'),
- (6,N'علي'),(7,N'مريم'),(8,N'نور'),(9,N'حمزة'),(10,N'سلمى'),(11,N'يوسف');
+INSERT INTO #Child (i, nm)
+SELECT ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1, v.nm
+FROM (VALUES
+ (N'Sara'),(N'Yousef'),(N'Lina'),(N'Adam'),(N'Maya'),(N'Zayd'),(N'Leo'),(N'Nora'),(N'Ethan'),(N'Lily'),
+ (N'Ravi'),(N'Anika'),(N'Kenji'),(N'Hana'),(N'Mateo'),(N'Sofia'),(N'Chloe'),(N'Liam'),(N'Aria'),(N'Omar'),
+ (N'Yara'),(N'Ivan'),(N'Mila'),(N'Tariq'),(N'Zoe'),(N'Niko'),(N'Amara'),(N'Kofi'),(N'Diya'),(N'Arjun'),
+ (N'Mei'),(N'Jin'),(N'Linh'),(N'Budi'),(N'Thabo'),(N'Nia'),(N'Pablo'),(N'Lucia'),(N'Emma'),(N'Noah'),
+ (N'Freya'),(N'Lars'),(N'Elif'),(N'Emre'),(N'Priya'),(N'Sami'),(N'Talia'),(N'Dev')
+) v(nm);
 
 DECLARE @FirstN int = (SELECT COUNT(*) FROM #First);
 DECLARE @LastN  int = (SELECT COUNT(*) FROM #Last);

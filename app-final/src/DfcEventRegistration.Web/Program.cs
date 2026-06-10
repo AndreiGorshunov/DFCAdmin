@@ -20,6 +20,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         sql => sql.CommandTimeout(120)));
 
 builder.Services.AddScoped<RegistrantQueryService>();
+builder.Services.AddScoped<ChildQueryService>();
 builder.Services.AddScoped<TshirtReportService>();
 builder.Services.AddScoped<ExcelExportService>();
 builder.Services.AddScoped<StreamingExportService>();

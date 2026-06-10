@@ -20,11 +20,12 @@ public class RegistrantQueryService
         if (f.Status is RegistrationStatus st)
             q = q.Where(r => r.Status == st);
 
-        // Тип участника: EXISTS по RegistrationParticipants (грейн остаётся = регистрация).
-        // Adults  -> есть участник-взрослый (FamilyMemberId == null, сам регистрант).
-        // Children-> есть участник-ребёнок (FamilyMemberId != null).
+        // Тип участника (exclusive-семантика, грейн остаётся = регистрация):
+        // Adults  -> регистрации БЕЗ детей (нет участника с FamilyMemberId != null).
+        // Children-> регистрации С детьми (есть участник с FamilyMemberId != null).
+        // Для просмотра самих ДЕТЕЙ (грейн = участник) есть отдельная вкладка /Children.
         if (f.ParticipantType == ParticipantKind.Adults)
-            q = q.Where(r => r.Participants.Any(p => p.FamilyMemberId == null));
+            q = q.Where(r => !r.Participants.Any(p => p.FamilyMemberId != null));
         else if (f.ParticipantType == ParticipantKind.Children)
             q = q.Where(r => r.Participants.Any(p => p.FamilyMemberId != null));
 
@@ -37,6 +38,7 @@ public class RegistrantQueryService
                 r.User.Email.Contains(term) ||
                 r.User.FirstName.Contains(term) ||
                 r.User.LastName.Contains(term) ||
+                //r.RegistrantLastName.Contains(term) // если включаешь денормализацию
                 (r.User.Phone != null && r.User.Phone.Contains(term)));
         }
 
