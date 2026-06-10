@@ -9,9 +9,10 @@
    Колонка объявлена в 01_schema.sql и заполняется в 03_bulk_load. Этот скрипт:
      1) добивает колонку, если её нет (для БД, созданных старой схемой);
      2) бэкфилл NULL-ов из Users;
-     3) делает колонку NOT NULL (после бэкфилла — иначе EF упадёт на NULL);
-     4) строит keyset-индекс (RegistrantLastName, RegistrationId);
-     5) (опционально) full-text индекс для поиска по именам.
+     3) снимает зависимый keyset-индекс, если он есть (иначе ALTER COLUMN падает);
+     4) делает колонку NOT NULL (после бэкфилла — иначе EF упадёт на NULL);
+     5) (пере)создаёт keyset-индекс (RegistrantLastName, RegistrationId);
+     6) (опционально) full-text индекс для поиска по именам.
 
    Порядок запуска: 01 (схема) -> 03 (bulk) -> 04 (этот файл).
 
@@ -36,11 +37,19 @@ JOIN   dbo.Users u ON u.UserId = er.UserId
 WHERE  er.RegistrantLastName IS NULL;
 GO
 
-/* 3. NOT NULL — строго после бэкфилла. ------------------------------------- */
+/* 3. Снимаем keyset-индекс, если он есть: он зависит от RegistrantLastName,
+      и без этого ALTER COLUMN падает (Msg 5074/4922). На свежей БД — no-op. ----- */
+IF EXISTS (SELECT 1 FROM sys.indexes
+           WHERE name = N'IX_ER_Keyset'
+             AND object_id = OBJECT_ID(N'dbo.EventRegistrations'))
+    DROP INDEX IX_ER_Keyset ON dbo.EventRegistrations;
+GO
+
+/* 4. NOT NULL — строго после бэкфилла и снятия зависимого индекса. --------- */
 ALTER TABLE dbo.EventRegistrations ALTER COLUMN RegistrantLastName nvarchar(100) NOT NULL;
 GO
 
-/* 4. Keyset-индекс: один seek на листинг (порядок = ORDER BY кода). --------- */
+/* 5. Keyset-индекс (пере)создаём: один seek на листинг (порядок = ORDER BY кода). */
 IF NOT EXISTS (SELECT 1 FROM sys.indexes
                WHERE name = N'IX_ER_Keyset'
                  AND object_id = OBJECT_ID(N'dbo.EventRegistrations'))
@@ -52,12 +61,13 @@ GO
 /* =============================================================================
    ОПЦИОНАЛЬНО — full-text поиск по именам (быстрее, чем LIKE %term% на больших
    объёмах). Email в FTS не кладём: токенизация по '@'/'.' ведёт себя странно —
-   для email лучше сарджабельный префикс  Email LIKE @q + '%'  по UX_Users_Email.
+   поэтому email/телефон ищутся обычным LIKE по Users.
 
-   ВНИМАНИЕ: чтобы это реально использовалось, поиск в коде нужно перевести на
-   CONTAINS через EF.FromSql (EF.Functions.Contains транслируется в LIKE, не в
-   полнотекстовый CONTAINS). Сейчас поиск в RegistrantQueryService — токенизированный
-   LIKE по Users; FTS-индекс ниже создаётся «про запас».
+   Поиск в RegistrantQueryService уже использует full-text: EF.Functions.Contains
+   (и EF.Functions.FreeText) транслируются в SQL-предикат CONTAINS/FREETEXT, а НЕ
+   в LIKE (LIKE — это string.Contains). FromSql не нужен. Без full-text индекса
+   ниже EF.Functions.Contains кинет SQL-ошибку — поэтому FTS-поиск держим на
+   отдельной ветке (fallback на токенизированный LIKE — в основной ветке).
    ============================================================================= */
 IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'dfc_ft')
     CREATE FULLTEXT CATALOG dfc_ft AS DEFAULT;

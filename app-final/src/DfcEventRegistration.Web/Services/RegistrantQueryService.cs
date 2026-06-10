@@ -7,7 +7,13 @@ namespace DfcEventRegistration.Web.Services;
 public class RegistrantQueryService
 {
     private readonly AppDbContext _db;
-    public RegistrantQueryService(AppDbContext db) => _db = db;
+    private readonly UserSearchService _search;
+
+    public RegistrantQueryService(AppDbContext db, UserSearchService search)
+    {
+        _db = db;
+        _search = search;
+    }
 
     /// <summary>Базовый отфильтрованный набор регистраций (без проекции).</summary>
     private IQueryable<EventRegistration> Base(RegistrantFilter f)
@@ -31,20 +37,11 @@ public class RegistrantQueryService
 
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
-            // Поиск — по АКТУАЛЬНЫМ данным Users (имя/фамилия/email/телефон), токенизированно:
-            // каждое слово ищется по полям (AND между словами, OR между полями) -> "John Smith" находит.
-            // Намеренно НЕ по денормализованной RegistrantLastName: поиск развязан с сортировкой/keyset.
-            // LIKE %token% не sargable -> скан; на больших объёмах ускоряется через full-text
-            // (FTS-индекс на Users уже создан в 04_keyset_indexes.sql, но требует перевода на CONTAINS).
-            foreach (var token in f.Q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(4))
-            {
-                var t = token;
-                q = q.Where(r =>
-                    r.User.Email.Contains(t) ||
-                    r.User.FirstName.Contains(t) ||
-                    r.User.LastName.Contains(t) ||
-                    (r.User.Phone != null && r.User.Phone.Contains(t)));
-            }
+            // Поиск по персоне делегируем общему хелперу (FTS/LIKE по флагу Search:UseFullText).
+            // Один сарджабельный IN по EventRegistrations.UserId (IX_EventRegistrations_UserId) —
+            // не ломает порядок/keyset по RegistrantLastName.
+            var userIds = _search.MatchUserIds(f.Q.Trim());
+            q = q.Where(r => userIds.Contains(r.UserId));
         }
 
         return q;

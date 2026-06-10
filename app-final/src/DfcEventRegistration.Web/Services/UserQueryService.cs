@@ -10,7 +10,13 @@ namespace DfcEventRegistration.Web.Services;
 public class UserQueryService
 {
     private readonly AppDbContext _db;
-    public UserQueryService(AppDbContext db) => _db = db;
+    private readonly UserSearchService _search;
+
+    public UserQueryService(AppDbContext db, UserSearchService search)
+    {
+        _db = db;
+        _search = search;
+    }
 
     private IQueryable<User> Base(UserFilter f)
     {
@@ -18,18 +24,10 @@ public class UserQueryService
 
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
-            // Токенизация: каждое слово должно найтись в каком-то поле (AND между словами,
-            // OR между полями). "John Smith" -> (John где-то) AND (Smith где-то), порядок неважен.
-            // Take(4) ограничивает стоимость при вставке длинной строки.
-            foreach (var token in f.Q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(4))
-            {
-                var t = token;
-                q = q.Where(u =>
-                    u.FirstName.Contains(t) ||
-                    u.LastName.Contains(t) ||
-                    u.Email.Contains(t) ||
-                    (u.Phone != null && u.Phone.Contains(t)));
-            }
+            // Грейн = персона: фильтруем Users по набору совпавших UserId из общего хелпера
+            // (имя FTS/LIKE по флагу Search:UseFullText + email/телефон LIKE).
+            var userIds = _search.MatchUserIds(f.Q.Trim());
+            q = q.Where(u => userIds.Contains(u.UserId));
         }
 
         return q;

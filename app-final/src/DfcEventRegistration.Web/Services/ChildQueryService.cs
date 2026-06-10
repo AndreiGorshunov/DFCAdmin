@@ -12,7 +12,13 @@ namespace DfcEventRegistration.Web.Services;
 public class ChildQueryService
 {
     private readonly AppDbContext _db;
-    public ChildQueryService(AppDbContext db) => _db = db;
+    private readonly UserSearchService _search;
+
+    public ChildQueryService(AppDbContext db, UserSearchService search)
+    {
+        _db = db;
+        _search = search;
+    }
 
     private IQueryable<RegistrationParticipant> Base(ChildFilter f)
     {
@@ -24,17 +30,31 @@ public class ChildQueryService
 
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
-            // Токенизация: каждое слово ищется по имени ребёнка / родителя / email
-            // (AND между словами, OR между полями). "Sara Smith" найдёт ребёнка Sara у родителя Smith.
-            foreach (var token in f.Q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(4))
+            var raw = f.Q.Trim();
+
+            // Родитель/контакт — через общий хелпер (имя FTS/LIKE по флагу + email/телефон).
+            var parentIds = _search.MatchUserIds(raw);
+
+            // Ребёнок — LIKE по FamilyMembers (full-text индекса на детей нет): каждый токен в имени/фамилии.
+            // Грейн-уровневый union: строка подходит, если совпал РОДИТЕЛЬ или имя РЕБЁНКА содержит все токены.
+            // (Чуть строже прежнего per-token cross-grain, но дети наследуют фамилию родителя,
+            //  поэтому "Имя Фамилия" по-прежнему находит ребёнка; кросс-грейн "ребёнок + имя родителя" — нет.)
+            var tokens = UserSearchService.Tokenize(raw);
+            if (tokens.Count > 0)
             {
-                var t = token;
-                q = q.Where(p =>
-                    p.FamilyMember!.FirstName.Contains(t) ||
-                    p.FamilyMember!.LastName.Contains(t) ||
-                    p.Registration.User.FirstName.Contains(t) ||
-                    p.Registration.User.LastName.Contains(t) ||
-                    p.Registration.User.Email.Contains(t));
+                var childMatch = _db.RegistrationParticipants.Where(p => p.FamilyMemberId != null);
+                foreach (var tok in tokens)
+                {
+                    var t = tok;
+                    childMatch = childMatch.Where(p =>
+                        p.FamilyMember!.FirstName.Contains(t) || p.FamilyMember!.LastName.Contains(t));
+                }
+                var childPids = childMatch.Select(p => p.ParticipantId);
+                q = q.Where(p => parentIds.Contains(p.Registration.UserId) || childPids.Contains(p.ParticipantId));
+            }
+            else
+            {
+                q = q.Where(p => parentIds.Contains(p.Registration.UserId));
             }
         }
 

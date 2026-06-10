@@ -19,6 +19,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("Default"),
         sql => sql.CommandTimeout(120)));
 
+builder.Services.AddScoped<UserSearchService>();
 builder.Services.AddScoped<RegistrantQueryService>();
 builder.Services.AddScoped<UserQueryService>();
 builder.Services.AddScoped<ChildQueryService>();
