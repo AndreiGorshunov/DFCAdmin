@@ -31,31 +31,41 @@ public class ChildQueryService
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
             var raw = f.Q.Trim();
+            var tokens = UserSearchService.Tokenize(raw);
 
             // Родитель/контакт — через общий хелпер (имя FTS/LIKE по флагу + email/телефон).
+            // Берём ParticipantId детей таких родителей (FamilyMemberId != null отсекает самого родителя).
             var parentIds = _search.MatchUserIds(raw);
+            var byParentPids = _db.RegistrationParticipants
+                .Where(p => p.FamilyMemberId != null && parentIds.Contains(p.Registration.UserId))
+                .Select(p => p.ParticipantId);
 
-            // Ребёнок — LIKE по FamilyMembers (full-text индекса на детей нет): каждый токен в имени/фамилии.
-            // Грейн-уровневый union: строка подходит, если совпал РОДИТЕЛЬ или имя РЕБЁНКА содержит все токены.
-            // (Чуть строже прежнего per-token cross-grain, но дети наследуют фамилию родителя,
-            //  поэтому "Имя Фамилия" по-прежнему находит ребёнка; кросс-грейн "ребёнок + имя родителя" — нет.)
-            var tokens = UserSearchService.Tokenize(raw);
+            IQueryable<long> matchedPids = byParentPids;
+
             if (tokens.Count > 0)
             {
-                var childMatch = _db.RegistrationParticipants.Where(p => p.FamilyMemberId != null);
+                // Имя РЕБЁНКА ищем в FamilyMembers (~0.5M), а НЕ по участникам (~2M):
+                // LIKE-скан меньшей таблицы -> FamilyMemberId, затем участники через индекс
+                // IX_RegistrationParticipants_FamilyMemberId. На детях full-text индекса нет.
+                var fm = _db.FamilyMembers.AsQueryable();
                 foreach (var tok in tokens)
                 {
                     var t = tok;
-                    childMatch = childMatch.Where(p =>
-                        p.FamilyMember!.FirstName.Contains(t) || p.FamilyMember!.LastName.Contains(t));
+                    fm = fm.Where(m => m.FirstName.Contains(t) || m.LastName.Contains(t));
                 }
-                var childPids = childMatch.Select(p => p.ParticipantId);
-                q = q.Where(p => parentIds.Contains(p.Registration.UserId) || childPids.Contains(p.ParticipantId));
+                var childFmIds = fm.Select(m => m.FamilyMemberId);
+
+                var byChildPids = _db.RegistrationParticipants
+                    .Where(p => p.FamilyMemberId != null && childFmIds.Contains(p.FamilyMemberId.Value))
+                    .Select(p => p.ParticipantId);
+
+                // Грейн-уровневый union по ParticipantId: совпал РОДИТЕЛЬ или имя РЕБЁНКА.
+                // (Дети наследуют фамилию родителя, поэтому "Имя Фамилия" по ребёнку работает.)
+                matchedPids = byParentPids.Union(byChildPids);
             }
-            else
-            {
-                q = q.Where(p => parentIds.Contains(p.Registration.UserId));
-            }
+
+            // Один сарджабельный фильтр по ParticipantId (кластерный PK) — без скана участников при 0 совпадений.
+            q = q.Where(p => matchedPids.Contains(p.ParticipantId));
         }
 
         if (f.Age == AgeBand.Under13)
