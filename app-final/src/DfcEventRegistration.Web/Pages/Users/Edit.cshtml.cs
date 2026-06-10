@@ -91,20 +91,28 @@ public class EditModel : PageModel
 
     public async Task<IActionResult> OnPostAddFamilyAsync(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(Input.NewFamilyFirstName) || string.IsNullOrWhiteSpace(Input.NewFamilyLastName))
+        // Эта форма НЕ редактирует персону. Чистим ModelState, иначе [Required] полей персоны
+        // (их нет в этой форме) дадут ложные ошибки и заставят asp-for показать пустые поля.
+        ModelState.Clear();
+
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(Input.NewFamilyFirstName)) errors.Add("First name is required.");
+        if (string.IsNullOrWhiteSpace(Input.NewFamilyLastName))  errors.Add("Last name is required.");
+        if (Input.NewFamilyDateOfBirth is null)                  errors.Add("Date of birth is required.");
+
+        if (errors.Count == 0)
         {
-            Error = "First and last name are required to add a family member.";
-            await LoadAsync(ct, fillInput: true);
-            return Page();
+            var (ok, err) = await _write.AddFamilyMemberAsync(Id,
+                Input.NewFamilyFirstName!.Trim(), Input.NewFamilyLastName!.Trim(), Input.NewFamilyDateOfBirth, ct);
+            if (ok) { Notice = "Family member added."; return RedirectToPage(new { Id }); }
+            errors.Add(err!);
         }
 
-        var (ok, err) = await _write.AddFamilyMemberAsync(Id,
-            Input.NewFamilyFirstName!.Trim(), Input.NewFamilyLastName!.Trim(), Input.NewFamilyDateOfBirth, ct);
-
-        if (!ok) { Error = err; await LoadAsync(ct, fillInput: true); return Page(); }
-
-        Notice = "Family member added.";
-        return RedirectToPage(new { Id });
+        Error = string.Join(" ", errors);
+        var keep = (Input.NewFamilyFirstName, Input.NewFamilyLastName, Input.NewFamilyDateOfBirth);
+        await LoadAsync(ct, fillInput: true);                 // вернуть поля персоны из БД
+        (Input.NewFamilyFirstName, Input.NewFamilyLastName, Input.NewFamilyDateOfBirth) = keep;  // сохранить ввод
+        return Page();
     }
 
     public async Task<IActionResult> OnPostDeleteFamilyAsync(int familyMemberId, CancellationToken ct)

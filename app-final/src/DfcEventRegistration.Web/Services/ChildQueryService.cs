@@ -46,6 +46,9 @@ public class ChildQueryService
         return q;
     }
 
+    public Task<int> CountAsync(ChildFilter f, CancellationToken ct = default)
+        => Base(f).CountAsync(ct);
+
     public IQueryable<ChildRow> Query(ChildFilter f)
         => Base(f).Select(p => new ChildRow
         {

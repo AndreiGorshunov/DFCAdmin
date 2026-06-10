@@ -271,7 +271,7 @@ BEGIN TRY
         )
         INSERT INTO dbo.FamilyMembers WITH (TABLOCK) (UserId, FirstName, LastName, DateOfBirth)
         SELECT g.UserId, ch.nm, g.LastName,
-               DATEADD(DAY, g.hd % 4017, '2013-01-01')                             -- ребёнок 2013..2023
+               DATEADD(DAY, g.hd % 6575, '2008-01-01')                             -- ребёнок 2008..2025 (возраст ~0..18 на событие 2026)
         FROM Gen g
         JOIN #Child ch ON ch.i = g.hf % @ChildN;
 

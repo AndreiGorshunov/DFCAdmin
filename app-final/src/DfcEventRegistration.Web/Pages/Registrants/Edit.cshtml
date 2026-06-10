@@ -192,10 +192,10 @@
         <form method="post" asp-page-handler="AddFamily" asp-route-id="@Model.Id">
             <input type="hidden" asp-for="Input.UserId" />
             <div class="grid2">
-                <label>First name<input asp-for="Input.NewFamilyFirstName" /></label>
-                <label>Last name<input asp-for="Input.NewFamilyLastName" /></label>
-                <label>Date of birth
-                    <input type="date" name="Input.NewFamilyDateOfBirth" value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
+                <label>First name<input asp-for="Input.NewFamilyFirstName" required /></label>
+                <label>Last name<input asp-for="Input.NewFamilyLastName" required /></label>
+                <label>Date of birth *
+                    <input type="date" name="Input.NewFamilyDateOfBirth" required value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
                 </label>
             </div>
             <div class="actions">
