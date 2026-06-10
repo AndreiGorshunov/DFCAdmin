@@ -24,13 +24,18 @@ public class ChildQueryService
 
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
-            var t = f.Q.Trim();
-            q = q.Where(p =>
-                p.FamilyMember!.FirstName.Contains(t) ||
-                p.FamilyMember!.LastName.Contains(t) ||
-                p.Registration.User.FirstName.Contains(t) ||
-                p.Registration.User.LastName.Contains(t) ||
-                p.Registration.User.Email.Contains(t));
+            // Токенизация: каждое слово ищется по имени ребёнка / родителя / email
+            // (AND между словами, OR между полями). "Sara Smith" найдёт ребёнка Sara у родителя Smith.
+            foreach (var token in f.Q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(4))
+            {
+                var t = token;
+                q = q.Where(p =>
+                    p.FamilyMember!.FirstName.Contains(t) ||
+                    p.FamilyMember!.LastName.Contains(t) ||
+                    p.Registration.User.FirstName.Contains(t) ||
+                    p.Registration.User.LastName.Contains(t) ||
+                    p.Registration.User.Email.Contains(t));
+            }
         }
 
         if (f.Age == AgeBand.Under13)
@@ -40,9 +45,6 @@ public class ChildQueryService
 
         return q;
     }
-
-    public Task<int> CountAsync(ChildFilter f, CancellationToken ct = default)
-        => Base(f).CountAsync(ct);
 
     public IQueryable<ChildRow> Query(ChildFilter f)
         => Base(f).Select(p => new ChildRow

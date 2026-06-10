@@ -31,15 +31,20 @@ public class RegistrantQueryService
 
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
-            var term = f.Q.Trim();
-            // LIKE %term% — для админ-инструмента ок; на больших объёмах
-            // ведущий wildcard не sargable (см. keyset_indexes.sql про full-text).
-            q = q.Where(r =>
-                r.User.Email.Contains(term) ||
-                r.User.FirstName.Contains(term) ||
-                r.User.LastName.Contains(term) ||
-                //r.RegistrantLastName.Contains(term) // если включаешь денормализацию
-                (r.User.Phone != null && r.User.Phone.Contains(term)));
+            // TODO !!!!!!
+            // Токенизация: каждое слово ищется по полям (AND между словами, OR между полями),
+            // поэтому "John Smith" находит человека. LIKE %token% не sargable -> скан (как и было);
+            // на миллионах строк масштабный ответ — full-text (см. keyset_indexes.sql).
+            foreach (var token in f.Q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(4))
+            {
+                var t = token;
+                q = q.Where(r =>
+                    r.User.Email.Contains(t) ||
+                    r.User.FirstName.Contains(t) ||
+                    r.User.LastName.Contains(t) ||
+                    //r.RegistrantLastName.Contains(t) || // если включаешь денормализацию
+                    (r.User.Phone != null && r.User.Phone.Contains(t)));
+            }
         }
 
         return q;

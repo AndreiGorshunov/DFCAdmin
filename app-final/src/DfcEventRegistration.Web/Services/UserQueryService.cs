@@ -18,12 +18,18 @@ public class UserQueryService
 
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
-            var t = f.Q.Trim();
-            q = q.Where(u =>
-                u.FirstName.Contains(t) ||
-                u.LastName.Contains(t) ||
-                u.Email.Contains(t) ||
-                (u.Phone != null && u.Phone.Contains(t)));
+            // Токенизация: каждое слово должно найтись в каком-то поле (AND между словами,
+            // OR между полями). "John Smith" -> (John где-то) AND (Smith где-то), порядок неважен.
+            // Take(4) ограничивает стоимость при вставке длинной строки.
+            foreach (var token in f.Q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(4))
+            {
+                var t = token;
+                q = q.Where(u =>
+                    u.FirstName.Contains(t) ||
+                    u.LastName.Contains(t) ||
+                    u.Email.Contains(t) ||
+                    (u.Phone != null && u.Phone.Contains(t)));
+            }
         }
 
         return q;
