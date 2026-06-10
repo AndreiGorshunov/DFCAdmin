@@ -1,0 +1,214 @@
+@page
+@model DfcEventRegistration.Web.Pages.Registrants.EditModel
+@using DfcEventRegistration.Web.Data
+@{
+    ViewData["Title"] = "Edit registrant";
+}
+
+<p class="muted"><a asp-page="/Registrants/Index">‹ Back to registrants</a></p>
+<h1>Edit registrant</h1>
+<p class="muted">Event: <strong>@Model.EventName</strong> · Registration #@Model.Id</p>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="flash ok">@Model.Notice</div>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+<div asp-validation-summary="All"></div>
+
+<!-- ============ Person + this registration ============ -->
+<form method="post" asp-page-handler="Save" asp-route-id="@Model.Id" class="card">
+    <input type="hidden" asp-for="Input.UserId" />
+    <input type="hidden" asp-for="Input.RegistrationId" />
+
+    <h2>Person</h2>
+    @if (Model.UserRegistrationCount > 1)
+    {
+        <p class="muted small">This person has <strong>@Model.UserRegistrationCount</strong> registrations —
+            editing name/email/phone updates them all.</p>
+    }
+    <div class="grid2">
+        <label>First name<input asp-for="Input.FirstName" /></label>
+        <label>Last name<input asp-for="Input.LastName" /></label>
+        <label>Email<input asp-for="Input.Email" /></label>
+        <label>Phone<input asp-for="Input.Phone" /></label>
+        <label>Date of birth
+            <input type="date" name="Input.DateOfBirth" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
+        </label>
+    </div>
+
+    <h2>Registration</h2>
+    <div class="grid2">
+        <label>Group code<input asp-for="Input.GroupCode" /></label>
+        <label>Status
+            <select asp-for="Input.Status" asp-items="Html.GetEnumSelectList<RegistrationStatus>()"></select>
+        </label>
+        <label>Emergency contact — first name<input asp-for="Input.EmergencyContactFirstName" /></label>
+        <label>Emergency contact — last name<input asp-for="Input.EmergencyContactLastName" /></label>
+        <label>Emergency contact — phone<input asp-for="Input.EmergencyContactPhone" /></label>
+    </div>
+
+    <div class="actions">
+        <button type="submit" class="btn-primary">Save changes</button>
+    </div>
+</form>
+
+<!-- ============ Participants of THIS registration ============ -->
+<div class="card">
+    <h2>Participants in this registration</h2>
+    <p class="muted small">
+        Who actually attends <strong>@Model.EventName</strong> on this registration. A family member can attend
+        a different event on another registration — that won't appear here.
+    </p>
+
+    <table class="grid">
+        <thead><tr><th>Participant</th><th>Type</th><th>T-shirt</th><th></th></tr></thead>
+        <tbody>
+            @if (Model.Participants.Count == 0)
+            {
+                <tr><td colspan="4" class="muted center">No participants on this registration.</td></tr>
+            }
+            @foreach (var p in Model.Participants)
+            {
+                <tr>
+                    <td>@(p.IsSelf ? "Registrant (self)" : p.Name)</td>
+                    <td>@(p.IsSelf ? "Self" : "Child")</td>
+                    <td>
+                        <form method="post" asp-page-handler="SetTshirt" asp-route-id="@Model.Id" class="inline-form">
+                            <input type="hidden" name="participantId" value="@p.ParticipantId" />
+                            <select name="tshirtSize">
+                                <option value="">(none)</option>
+                                @foreach (var s in Model.Sizes)
+                                {
+                                    <option value="@s" selected="@(p.TshirtSize == s)">@s</option>
+                                }
+                            </select>
+                            <button type="submit" class="btn-link">Save</button>
+                        </form>
+                    </td>
+                    <td>
+                        @if (!p.IsSelf)
+                        {
+                            <form method="post" asp-page-handler="RemoveParticipant" asp-route-id="@Model.Id"
+                                  class="inline-form"
+                                  onsubmit="return confirm('Remove this participant from this registration? The family member stays in the roster.');">
+                                <input type="hidden" name="participantId" value="@p.ParticipantId" />
+                                <button type="submit" class="link-danger">Remove from event</button>
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h3>Add a family member to this registration</h3>
+    @if (Model.AvailableToAdd.Count == 0)
+    {
+        <p class="muted">Everyone in the roster is already on this registration (or the roster is empty — add one below).</p>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="AddParticipant" asp-route-id="@Model.Id" class="inline-form">
+            <select name="familyMemberId">
+                @foreach (var f in Model.AvailableToAdd)
+                {
+                    <option value="@f.FamilyMemberId">@f.FirstName @f.LastName</option>
+                }
+            </select>
+            <select name="tshirtSize">
+                <option value="">(no shirt)</option>
+                @foreach (var s in Model.Sizes)
+                {
+                    <option value="@s">@s</option>
+                }
+            </select>
+            <button type="submit" class="btn-secondary">Add to this registration</button>
+        </form>
+    }
+</div>
+
+<!-- ============ Family roster (person-level) ============ -->
+<div class="card">
+    <h2>Family roster <span class="muted small">(shared across all of this person's registrations)</span></h2>
+    <p class="muted small">
+        The person's master list of family members. Editing or deleting here changes that record everywhere;
+        deleting removes them from <strong>every</strong> registration. Adding here does <strong>not</strong>
+        put them on this registration — use the section above for that.
+    </p>
+
+    @if (Model.Family.Count == 0)
+    {
+        <p class="muted">No family members in the roster.</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>First name</th><th>Last name</th><th>Date of birth</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var f in Model.Family)
+                {
+                    <tr>
+                        <td>@f.FirstName</td>
+                        <td>@f.LastName</td>
+                        <td>@(f.DateOfBirth?.ToString("yyyy-MM-dd"))</td>
+                        <td class="row-actions">
+                            <a asp-page="/FamilyMembers/Edit" asp-route-id="@f.FamilyMemberId" asp-route-regId="@Model.Id">Edit</a>
+                            <form method="post" asp-page-handler="DeleteFamily" asp-route-id="@Model.Id"
+                                  onsubmit="return confirm('Delete this family member from the roster? They will be removed from every registration.');">
+                                <input type="hidden" name="familyMemberId" value="@f.FamilyMemberId" />
+                                <button type="submit" class="link-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <h3>Add family member to roster</h3>
+    <form method="post" asp-page-handler="AddFamily" asp-route-id="@Model.Id">
+        <input type="hidden" asp-for="Input.UserId" />
+        <div class="grid2">
+            <label>First name<input asp-for="Input.NewFamilyFirstName" /></label>
+            <label>Last name<input asp-for="Input.NewFamilyLastName" /></label>
+            <label>Date of birth
+                <input type="date" name="Input.NewFamilyDateOfBirth" value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
+            </label>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn-secondary">Add to roster</button>
+        </div>
+    </form>
+</div>
+
+<!-- ============ Danger zone ============ -->
+<div class="card danger">
+    <h2>Danger zone</h2>
+
+    <div class="danger-row">
+        <div>
+            <strong>Delete this registration</strong>
+            <p class="muted small">Removes registration #@Model.Id and its participants. The person and other registrations stay.</p>
+        </div>
+        <form method="post" asp-page-handler="DeleteRegistration" asp-route-id="@Model.Id"
+              onsubmit="return confirm('Delete registration #@Model.Id and its participants?');">
+            <button type="submit" class="btn-danger">Delete registration</button>
+        </form>
+    </div>
+
+    <div class="danger-row">
+        <div>
+            <strong>Delete the entire registrant</strong>
+            <p class="muted small">Removes the person, all @Model.UserRegistrationCount registration(s), family members and participants. Cannot be undone.</p>
+        </div>
+        <form method="post" asp-page-handler="DeleteUser" asp-route-id="@Model.Id"
+              onsubmit="return confirm('Delete this person and ALL related data (@Model.UserRegistrationCount registrations + family members)? This cannot be undone.');">
+            <input type="hidden" name="userId" value="@Model.Input.UserId" />
+            <button type="submit" class="btn-danger">Delete registrant + all data</button>
+        </form>
+    </div>
+</div>

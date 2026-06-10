@@ -1,0 +1,56 @@
+@page
+@model DfcEventRegistration.Web.Pages.FamilyMembers.EditModel
+@{
+    ViewData["Title"] = "Edit family member";
+    var backId = Model.RegId;
+}
+
+<p class="muted">
+    @if (backId is long rid)
+    {
+        <a asp-page="/Registrants/Edit" asp-route-id="@rid">‹ Back to registrant</a>
+    }
+    else
+    {
+        <a asp-page="/Registrants/Index">‹ Back</a>
+    }
+</p>
+
+<h1>Edit family member</h1>
+@if (!string.IsNullOrEmpty(Model.OwnerName))
+{
+    <p class="muted">Belongs to: <strong>@Model.OwnerName</strong></p>
+}
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+<div asp-validation-summary="All"></div>
+
+<form method="post" asp-page-handler="Save" asp-route-id="@Model.Id" asp-route-regId="@Model.RegId" class="card">
+    <input type="hidden" asp-for="Input.FamilyMemberId" />
+    <div class="grid2">
+        <label>First name<input asp-for="Input.FirstName" /></label>
+        <label>Last name<input asp-for="Input.LastName" /></label>
+        <label>Date of birth
+            <input type="date" name="Input.DateOfBirth" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
+        </label>
+    </div>
+    <div class="actions">
+        <button type="submit" class="btn-primary">Save</button>
+    </div>
+</form>
+
+<div class="card danger">
+    <div class="danger-row">
+        <div>
+            <strong>Delete family member</strong>
+            <p class="muted small">Removes this person and detaches them from any registrations.</p>
+        </div>
+        <form method="post" asp-page-handler="Delete" asp-route-id="@Model.Id" asp-route-regId="@Model.RegId"
+              onsubmit="return confirm('Delete this family member?');">
+            <button type="submit" class="btn-danger">Delete</button>
+        </form>
+    </div>
+</div>

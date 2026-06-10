@@ -1,0 +1,44 @@
+@page
+@model DfcEventRegistration.Web.Pages.Events.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "New event" : "Edit event";
+}
+
+<p class="muted"><a asp-page="/Events/Index">‹ Back to events</a></p>
+<h1>@(Model.IsNew ? "New event" : "Edit event")</h1>
+
+@if (!Model.IsNew)
+{
+    <p class="muted small">Id: <code>@Model.Id</code> (from external system — not editable)</p>
+}
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+<div asp-validation-summary="All"></div>
+
+<form method="post" asp-page-handler="Save" asp-route-id="@Model.Id" class="card">
+    <input type="hidden" asp-for="Input.Id" />
+
+    <label>Name<input asp-for="Input.Name" /></label>
+
+    <label>Description<textarea asp-for="Input.Description" rows="3"></textarea></label>
+
+    <div class="grid2">
+        <label>Start
+            <input type="datetime-local" name="Input.StartDate" value="@Model.Input.StartDate.ToString("yyyy-MM-ddTHH:mm")" />
+        </label>
+        <label>End
+            <input type="datetime-local" name="Input.EndDate" value="@Model.Input.EndDate.ToString("yyyy-MM-ddTHH:mm")" />
+        </label>
+        <label>Registration opening
+            <input type="datetime-local" name="Input.RegistrationOpeningDate" value="@(Model.Input.RegistrationOpeningDate?.ToString("yyyy-MM-ddTHH:mm"))" />
+        </label>
+    </div>
+
+    <div class="actions">
+        <button type="submit" class="btn-primary">@(Model.IsNew ? "Create event" : "Save changes")</button>
+        <a class="btn-secondary" asp-page="/Events/Index">Cancel</a>
+    </div>
+</form>

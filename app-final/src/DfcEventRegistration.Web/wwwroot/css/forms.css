@@ -1,0 +1,102 @@
+/* Формы и карточки для страниц редактирования (дополняет site.css). */
+
+.card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+.card h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+.card h3 { font-size: 0.95rem; margin: 1.25rem 0 0.5rem; }
+
+.grid2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1.25rem;
+}
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+label input, label select, label textarea {
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: var(--fg);
+    background: #fff;
+}
+label input:focus, label select:focus, label textarea:focus {
+    outline: 2px solid var(--accent-bg);
+    border-color: var(--accent);
+}
+
+.actions { margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; }
+
+.btn-primary, .btn-secondary, .btn-danger {
+    padding: 0.5rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-decoration: none;
+    border: 1px solid transparent;
+    display: inline-block;
+}
+.btn-primary   { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-secondary { background: #fff; color: var(--fg); border-color: var(--line); }
+.btn-danger    { background: var(--red); color: #fff; border-color: var(--red); }
+
+.link-danger {
+    background: none; border: none; color: var(--red);
+    cursor: pointer; font-size: 0.88rem; padding: 0; text-decoration: underline;
+}
+
+.row-actions { display: flex; gap: 0.75rem; align-items: center; white-space: nowrap; }
+.row-actions form, .inline-delete { display: inline-flex; gap: 0.4rem; align-items: center; margin: 0; }
+.inline-delete .cascade { flex-direction: row; gap: 0.25rem; align-items: center; font-size: 0.8rem; color: var(--red); }
+
+/* Компактные формы внутри ячеек таблицы (размер футболки / remove) */
+.inline-form { display: inline-flex; gap: 0.4rem; align-items: center; margin: 0; }
+.inline-form select { padding: 0.3rem 0.4rem; font-size: 0.85rem; }
+.btn-link {
+    background: none; border: none; color: var(--accent);
+    cursor: pointer; font-size: 0.85rem; padding: 0; text-decoration: underline;
+}
+
+.small { font-size: 0.82rem; }
+
+.card.danger { border-color: #f3c2bd; background: #fffafa; }
+.card.danger h2 { color: var(--red); }
+.danger-row {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 1rem; padding: 0.75rem 0; border-top: 1px solid #f3dcd9;
+}
+.danger-row:first-of-type { border-top: none; }
+.danger-row p { margin: 0.25rem 0 0; }
+
+.flash {
+    padding: 0.6rem 0.9rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem;
+}
+.flash.ok  { background: var(--green-bg); color: var(--green); }
+.flash.err { background: var(--red-bg);  color: var(--red); }
+.flash:empty { display: none; }
+
+.field-err { color: var(--red); font-size: 0.8rem; }
+
+/* ASP.NET validation summary */
+.validation-summary-errors {
+    background: var(--red-bg); color: var(--red);
+    padding: 0.6rem 0.9rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem;
+}
+.validation-summary-errors ul { margin: 0; padding-left: 1.2rem; }
+.validation-summary-valid { display: none; }
+input.input-validation-error, select.input-validation-error, textarea.input-validation-error {
+    border-color: var(--red);
+}
+code { background: #f2f3f5; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85rem; }

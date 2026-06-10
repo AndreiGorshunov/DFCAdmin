@@ -1,0 +1,68 @@
+@page
+@model DfcEventRegistration.Web.Pages.Reports.TshirtsModel
+@{
+    ViewData["Title"] = "T-shirt report";
+    var exportRoute = new Dictionary<string, string?> { ["EventId"] = Model.EventId?.ToString() };
+}
+
+<h1>T-shirt report</h1>
+<p class="muted">
+    <em>Requested</em> = participants with a size. <em>Collected</em> = registration is checked-in
+    (proxy — there is no explicit issue flag in the schema). <em>Stock</em> comes from configuration.
+</p>
+
+<form method="get" class="filters">
+    <select name="EventId">
+        <option value="">— All events —</option>
+        @foreach (var e in Model.Events)
+        {
+            <option value="@e.Id" selected="@(Model.EventId == e.Id)">@e.Name</option>
+        }
+    </select>
+    <button type="submit">Apply</button>
+    <a class="btn-export" asp-page="/Reports/Tshirts" asp-page-handler="Export"
+       asp-all-route-data="exportRoute">⬇ Export to Excel</a>
+</form>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Size</th>
+            <th class="num">Requested</th>
+            <th class="num">Collected</th>
+            <th class="num">Outstanding</th>
+            <th class="num">Stock</th>
+            <th class="num">Stock after collection</th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="6" class="muted center">No data.</td></tr>
+        }
+        @foreach (var r in Model.Rows)
+        {
+            <tr>
+                <td><strong>@r.Size</strong></td>
+                <td class="num">@r.Requested.ToString("N0")</td>
+                <td class="num">@r.Collected.ToString("N0")</td>
+                <td class="num">@r.OutstandingToCollect.ToString("N0")</td>
+                <td class="num">@(r.Stock?.ToString("N0") ?? "—")</td>
+                <td class="num">@(r.StockAfterCollection?.ToString("N0") ?? "—")</td>
+            </tr>
+        }
+    </tbody>
+    @if (Model.Rows.Count > 0)
+    {
+        <tfoot>
+            <tr>
+                <td>Total</td>
+                <td class="num">@Model.TotalRequested.ToString("N0")</td>
+                <td class="num">@Model.TotalCollected.ToString("N0")</td>
+                <td class="num">@((Model.TotalRequested - Model.TotalCollected).ToString("N0"))</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+        </tfoot>
+    }
+</table>

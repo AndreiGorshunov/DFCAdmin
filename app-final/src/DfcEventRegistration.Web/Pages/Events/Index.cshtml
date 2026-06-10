@@ -1,0 +1,55 @@
+@page
+@model DfcEventRegistration.Web.Pages.Events.IndexModel
+@{
+    ViewData["Title"] = "Events";
+}
+
+<h1>Events</h1>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="flash ok">@Model.Notice</div>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+
+<p><a class="btn-primary" asp-page="/Events/Edit">+ New event</a></p>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Name</th><th>Start</th><th>End</th><th>Registration opens</th>
+            <th class="num">Registrations</th><th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Model.Events.Count == 0)
+        {
+            <tr><td colspan="6" class="muted center">No events yet.</td></tr>
+        }
+        @foreach (var e in Model.Events)
+        {
+            <tr>
+                <td><strong>@e.Name</strong></td>
+                <td>@e.StartDate.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@e.EndDate.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@(e.RegistrationOpeningDate?.ToString("yyyy-MM-dd") ?? "—")</td>
+                <td class="num">@e.Registrations.ToString("N0")</td>
+                <td class="row-actions">
+                    <a asp-page="/Events/Edit" asp-route-id="@e.Id">Edit</a>
+                    <form method="post" asp-page-handler="Delete" class="inline-delete"
+                          onsubmit="return confirm('Delete this event@(e.Registrations > 0 ? " and its " + e.Registrations.ToString("N0") + " registration(s)" : "")?');">
+                        <input type="hidden" name="id" value="@e.Id" />
+                        @if (e.Registrations > 0)
+                        {
+                            <label class="cascade"><input type="checkbox" name="force" value="true" /> cascade</label>
+                        }
+                        <button type="submit" class="link-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
