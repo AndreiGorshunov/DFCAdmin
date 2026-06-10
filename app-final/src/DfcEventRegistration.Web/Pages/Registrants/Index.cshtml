@@ -145,7 +145,7 @@ else
                 </td>
                 <td class="num">@r.KidsBelow13</td>
                 <td class="num">@r.KidsAbove13</td>
-                <td>@if (isAdmin) { <a asp-page="/Registrants/Edit" asp-route-id="@r.RegistrationId">Edit</a> }</td>
+                <td>@if (isAdmin) { <a asp-page="/Registrants/Edit" asp-route-id="@r.RegistrationId">Edit</a> } else { <a asp-page="/Registrants/Details" asp-route-id="@r.RegistrationId">View</a> }</td>
             </tr>
         }
     </tbody>

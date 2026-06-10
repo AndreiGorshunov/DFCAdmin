@@ -24,6 +24,8 @@ var razorPages = builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/Users/Edit", Policies.CanManage);
     options.Conventions.AuthorizeFolder("/Events", Policies.CanManage);
     options.Conventions.AuthorizePage("/FamilyMembers/Edit", Policies.CanManage);
+    options.Conventions.AuthorizeFolder("/Admins", Policies.CanManage);
+    options.Conventions.AuthorizeFolder("/Audit", Policies.CanManage);
 
     // Вход/отказ/выход — без авторизации (иначе редирект-петля на логине).
     options.Conventions.AllowAnonymousToPage("/Account/Login");
@@ -59,8 +61,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
     });
 
-// Шов: маппинг email -> роль приложения из allowlist (для реального IdP). Для dev-логина no-op.
-builder.Services.AddSingleton<IClaimsTransformation, AllowlistRoleTransformation>();
+// Резолв роли по email из таблицы AdminUsers (при входе: dev-логин и будущий OIDC — см. OidcAuthentication.cs).
+builder.Services.AddScoped<IRoleResolver, RoleResolver>();
+
+// Аудит мутаций (актёр берётся из claims текущего запроса).
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AuditService>();
 
 builder.Services.AddAuthorization(options =>
 {

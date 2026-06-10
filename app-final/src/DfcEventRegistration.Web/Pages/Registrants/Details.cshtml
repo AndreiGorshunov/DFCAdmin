@@ -1,0 +1,106 @@
+@page
+@model DfcEventRegistration.Web.Pages.Registrants.DetailsModel
+@using DfcEventRegistration.Web.Data
+@{
+    ViewData["Title"] = "Registrant details";
+    var isAdmin = User.IsInRole(Auth.Roles.Admin);
+
+    string EmergencyContact()
+    {
+        var name = $"{Model.Reg.EmergencyContactFirstName} {Model.Reg.EmergencyContactLastName}".Trim();
+        var phone = Model.Reg.EmergencyContactPhone;
+        if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(phone)) return "—";
+        if (string.IsNullOrWhiteSpace(phone)) return name;
+        if (string.IsNullOrWhiteSpace(name)) return phone!;
+        return $"{name} · {phone}";
+    }
+}
+
+<p class="muted"><a asp-page="/Registrants/Index">‹ Back to registrants</a></p>
+<h1>Registrant details</h1>
+<p class="muted">Event: <strong>@Model.EventName</strong> · Registration #@Model.Id</p>
+
+@if (isAdmin)
+{
+    <p><a class="btn-secondary" asp-page="/Registrants/Edit" asp-route-id="@Model.Id">Edit</a></p>
+}
+
+<!-- ============ Person (the registrant / parent) ============ -->
+<div class="card">
+    <h2>Person <span class="muted small">(the registrant / parent)</span></h2>
+    @if (Model.UserRegistrationCount > 1)
+    {
+        <p class="muted small">This person has <strong>@Model.UserRegistrationCount</strong> registrations.</p>
+    }
+    <table class="grid">
+        <tbody>
+            <tr><th>Name</th><td>@Model.Person.FirstName @Model.Person.LastName</td></tr>
+            <tr><th>Email</th><td>@Model.Person.Email</td></tr>
+            <tr><th>Phone</th><td>@(string.IsNullOrEmpty(Model.Person.Phone) ? "—" : Model.Person.Phone)</td></tr>
+            <tr><th>Date of birth</th><td>@(Model.Person.DateOfBirth?.ToString("yyyy-MM-dd") ?? "—")</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ============ Registration ============ -->
+<div class="card">
+    <h2>Registration</h2>
+    <table class="grid">
+        <tbody>
+            <tr><th>Status</th><td>@Model.Reg.Status</td></tr>
+            <tr><th>Group code</th><td>@(string.IsNullOrEmpty(Model.Reg.GroupCode) ? "—" : Model.Reg.GroupCode)</td></tr>
+            <tr><th>Registered (UTC)</th><td>@Model.Reg.RegistrationDate.ToString("yyyy-MM-dd HH:mm")</td></tr>
+            <tr><th>QR code</th><td>@(string.IsNullOrEmpty(Model.Reg.QRCode) ? "—" : Model.Reg.QRCode)</td></tr>
+            <tr><th>Emergency contact</th><td>@EmergencyContact()</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ============ Participants of THIS registration ============ -->
+<div class="card">
+    <h2>Participants in this registration <span class="muted small">(self + @Model.ChildCount child(ren))</span></h2>
+    <p class="muted small">Who actually attends on this registration. <strong>Self</strong> is the registrant; <strong>Child</strong> is a family member.</p>
+    <table class="grid">
+        <thead><tr><th>Participant</th><th>Type</th><th>T-shirt</th></tr></thead>
+        <tbody>
+            @if (Model.Participants.Count == 0)
+            {
+                <tr><td colspan="3" class="muted center">No participants on this registration.</td></tr>
+            }
+            @foreach (var p in Model.Participants)
+            {
+                <tr>
+                    <td>@(p.IsSelf ? "Registrant (self)" : p.Name)</td>
+                    <td>@(p.IsSelf ? "Self" : "Child")</td>
+                    <td>@(string.IsNullOrEmpty(p.TshirtSize) ? "—" : p.TshirtSize)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- ============ Family roster (person-level) ============ -->
+<div class="card">
+    <h2>Family roster <span class="muted small">(all of this person's family members)</span></h2>
+    <p class="muted small">The person's master list of children/members, shared across all of their registrations.</p>
+    @if (Model.Family.Count == 0)
+    {
+        <p class="muted">No family members in the roster.</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>First name</th><th>Last name</th><th>Date of birth</th></tr></thead>
+            <tbody>
+                @foreach (var f in Model.Family)
+                {
+                    <tr>
+                        <td>@f.FirstName</td>
+                        <td>@f.LastName</td>
+                        <td>@(f.DateOfBirth?.ToString("yyyy-MM-dd") ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

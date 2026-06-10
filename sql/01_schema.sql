@@ -207,6 +207,54 @@ END
 GO
 
 /* =============================================================================
+   6. AdminUsers  (доступ в админку + роль)
+   Источник истины для ролей: IdP аутентифицирует личность, роль назначается здесь.
+   ============================================================================= */
+IF OBJECT_ID(N'dbo.AdminUsers', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.AdminUsers
+    (
+        AdminUserId  INT            IDENTITY(1,1) NOT NULL,
+        Email        NVARCHAR(256)  NOT NULL,
+        Role         NVARCHAR(32)   NOT NULL,        -- 'Admin' | 'Partner'
+        DisplayName  NVARCHAR(200)  NULL,
+        IsActive     BIT            NOT NULL CONSTRAINT DF_AdminUsers_IsActive DEFAULT (1),
+        GrantedBy    NVARCHAR(256)  NULL,            -- кто выдал доступ
+        GrantedAtUtc DATETIME2(0)   NOT NULL CONSTRAINT DF_AdminUsers_GrantedAt DEFAULT (SYSUTCDATETIME()),
+        ExpiresAtUtc DATETIME2(0)   NULL,            -- null = бессрочно
+
+        CONSTRAINT PK_AdminUsers PRIMARY KEY CLUSTERED (AdminUserId)
+    );
+
+    CREATE UNIQUE INDEX UX_AdminUsers_Email ON dbo.AdminUsers (Email);
+END
+GO
+
+/* =============================================================================
+   7. AuditLog  (кто/когда/что сделал)
+   Пишется на каждую мутацию/удаление (в той же транзакции, что и изменение).
+   ============================================================================= */
+IF OBJECT_ID(N'dbo.AuditLog', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.AuditLog
+    (
+        AuditId     BIGINT         IDENTITY(1,1) NOT NULL,
+        WhenUtc     DATETIME2(0)   NOT NULL CONSTRAINT DF_AuditLog_WhenUtc DEFAULT (SYSUTCDATETIME()),
+        ActorEmail  NVARCHAR(256)  NULL,
+        Action      NVARCHAR(64)   NOT NULL,
+        EntityType  NVARCHAR(64)   NULL,
+        EntityId    NVARCHAR(64)   NULL,
+        Details     NVARCHAR(1024) NULL,
+
+        CONSTRAINT PK_AuditLog PRIMARY KEY CLUSTERED (AuditId)
+    );
+
+    -- Свежие записи сверху (вьюер сортирует по WhenUtc DESC).
+    CREATE INDEX IX_AuditLog_WhenUtc ON dbo.AuditLog (WhenUtc DESC);
+END
+GO
+
+/* =============================================================================
    ПРИМЕЧАНИЕ ПРО КАСКАДНОЕ УДАЛЕНИЕ
    -----------------------------------------------------------------------------
    Все FK созданы с NO ACTION (поведение по умолчанию). Причина:

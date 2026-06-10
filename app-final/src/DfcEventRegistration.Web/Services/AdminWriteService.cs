@@ -1,3 +1,4 @@
+using DfcEventRegistration.Web.Auth;
 using DfcEventRegistration.Web.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,11 +8,20 @@ namespace DfcEventRegistration.Web.Services;
 /// Все мутации/удаления. FK в схеме = NO ACTION (multiple cascade paths не дают
 /// поставить ON DELETE CASCADE), поэтому каскады делаем вручную в нужном порядке
 /// внутри транзакции и set-based через ExecuteDelete (без загрузки в память).
+///
+/// Аудит: каждая мутация стейджит запись в AuditLog ВНУТРИ той же транзакции
+/// (для tx-методов — перед Commit), чтобы «кто/что сделал» было атомарно с изменением.
 /// </summary>
 public class AdminWriteService
 {
     private readonly AppDbContext _db;
-    public AdminWriteService(AppDbContext db) => _db = db;
+    private readonly AuditService _audit;
+
+    public AdminWriteService(AppDbContext db, AuditService audit)
+    {
+        _db = db;
+        _audit = audit;
+    }
 
     /// <summary>Канонические размеры футболок (UI-список). В схеме TshirtSize — свободная строка.</summary>
     public static readonly string[] TshirtSizes = { "XS", "S", "M", "L", "XL", "XXL" };
@@ -85,6 +95,9 @@ public class AdminWriteService
             .Where(r => r.UserId == e.UserId)
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.RegistrantLastName, e.LastName), ct);
 
+        _audit.Stage("Registrant.Update", "EventRegistration", e.RegistrationId.ToString(), $"userId={e.UserId}");
+        await _db.SaveChangesAsync(ct);
+
         await tx.CommitAsync(ct);
         return (true, null);
     }
@@ -101,6 +114,9 @@ public class AdminWriteService
         await _db.EventRegistrations
             .Where(r => r.RegistrationId == registrationId)
             .ExecuteDeleteAsync(ct);
+
+        _audit.Stage("Registration.Delete", "EventRegistration", registrationId.ToString());
+        await _db.SaveChangesAsync(ct);
 
         await tx.CommitAsync(ct);
     }
@@ -129,6 +145,9 @@ public class AdminWriteService
         await _db.FamilyMembers.Where(f => f.UserId == userId).ExecuteDeleteAsync(ct);
         await _db.Users.Where(u => u.UserId == userId).ExecuteDeleteAsync(ct);
 
+        _audit.Stage("User.DeleteCascade", "User", userId.ToString());
+        await _db.SaveChangesAsync(ct);
+
         await tx.CommitAsync(ct);
     }
 
@@ -150,6 +169,9 @@ public class AdminWriteService
 
         var u = new User { FirstName = firstName, LastName = lastName, Email = email, Phone = phone, DateOfBirth = dob };
         _db.Users.Add(u);
+        await _db.SaveChangesAsync(ct);
+
+        _audit.Stage("User.Create", "User", u.UserId.ToString(), $"email={email}");
         await _db.SaveChangesAsync(ct);
         return (true, null, u.UserId);
     }
@@ -180,6 +202,9 @@ public class AdminWriteService
             .Where(r => r.UserId == e.UserId)
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.RegistrantLastName, e.LastName), ct);
 
+        _audit.Stage("User.Update", "User", e.UserId.ToString());
+        await _db.SaveChangesAsync(ct);
+
         await tx.CommitAsync(ct);
         return (true, null);
     }
@@ -197,17 +222,20 @@ public class AdminWriteService
             return (false, "Registration opening must be on or before the start date.", Guid.Empty);
 
         Event ev;
+        bool isNew;
         if (e.Id is Guid id && id != Guid.Empty)
         {
             var existing = await _db.Events.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (existing is null) return (false, "Event not found.", Guid.Empty);
             ev = existing;
+            isNew = false;
         }
         else
         {
             // Id "из внешней системы" — при ручном создании генерим новый GUID.
             ev = new Event { Id = Guid.NewGuid() };
             _db.Events.Add(ev);
+            isNew = true;
         }
 
         ev.Name = e.Name;
@@ -216,6 +244,9 @@ public class AdminWriteService
         ev.EndDate = e.EndDate;
         ev.RegistrationOpeningDate = e.RegistrationOpeningDate;
 
+        await _db.SaveChangesAsync(ct);
+
+        _audit.Stage(isNew ? "Event.Create" : "Event.Update", "Event", ev.Id.ToString(), $"name={e.Name}");
         await _db.SaveChangesAsync(ct);
         return (true, null, ev.Id);
     }
@@ -235,6 +266,9 @@ public class AdminWriteService
         await _db.RegistrationParticipants.Where(p => p.EventId == eventId).ExecuteDeleteAsync(ct);
         await _db.EventRegistrations.Where(r => r.EventId == eventId).ExecuteDeleteAsync(ct);
         await _db.Events.Where(e => e.Id == eventId).ExecuteDeleteAsync(ct);
+
+        _audit.Stage("Event.DeleteCascade", "Event", eventId.ToString());
+        await _db.SaveChangesAsync(ct);
 
         await tx.CommitAsync(ct);
     }
@@ -268,21 +302,28 @@ public class AdminWriteService
             FamilyMemberId = familyMemberId,
             TshirtSize = NormalizeSize(tshirtSize)
         });
+        _audit.Stage("Participant.Add", "Registration", registrationId.ToString(), $"familyMemberId={familyMemberId}");
         await _db.SaveChangesAsync(ct);
         return (true, null);
     }
 
     /// <summary>Убрать участника ИЗ ЭТОЙ регистрации (член семьи в ростере остаётся).</summary>
     public async Task RemoveParticipantAsync(long participantId, CancellationToken ct = default)
-        => await _db.RegistrationParticipants
+    {
+        await _db.RegistrationParticipants
             .Where(p => p.ParticipantId == participantId)
             .ExecuteDeleteAsync(ct);
+
+        _audit.Stage("Participant.Remove", "Participant", participantId.ToString());
+        await _db.SaveChangesAsync(ct);
+    }
 
     public async Task SetParticipantTshirtAsync(long participantId, string? size, CancellationToken ct = default)
     {
         var p = await _db.RegistrationParticipants.FirstOrDefaultAsync(x => x.ParticipantId == participantId, ct);
         if (p is null) return;
         p.TshirtSize = NormalizeSize(size);
+        _audit.Stage("Participant.SetTshirt", "Participant", participantId.ToString(), $"size={p.TshirtSize}");
         await _db.SaveChangesAsync(ct);
     }
 
@@ -301,6 +342,7 @@ public class AdminWriteService
         fm.LastName = e.LastName;
         fm.DateOfBirth = e.DateOfBirth;
 
+        _audit.Stage("FamilyMember.Update", "FamilyMember", e.FamilyMemberId.ToString());
         await _db.SaveChangesAsync(ct);
         return (true, null);
     }
@@ -326,6 +368,7 @@ public class AdminWriteService
             LastName = lastName,
             DateOfBirth = dateOfBirth
         });
+        _audit.Stage("FamilyMember.Add", "User", userId.ToString());
         await _db.SaveChangesAsync(ct);
         return (true, null);
     }
@@ -338,10 +381,76 @@ public class AdminWriteService
         await _db.RegistrationParticipants.Where(p => p.FamilyMemberId == familyMemberId).ExecuteDeleteAsync(ct);
         await _db.FamilyMembers.Where(f => f.FamilyMemberId == familyMemberId).ExecuteDeleteAsync(ct);
 
+        _audit.Stage("FamilyMember.Delete", "FamilyMember", familyMemberId.ToString());
+        await _db.SaveChangesAsync(ct);
+
         await tx.CommitAsync(ct);
     }
 
     public async Task<int> UserIdOfFamilyMemberAsync(int familyMemberId, CancellationToken ct = default)
         => await _db.FamilyMembers.Where(f => f.FamilyMemberId == familyMemberId)
                    .Select(f => f.UserId).FirstOrDefaultAsync(ct);
+
+    // ============================ Admin users (доступ) ============================
+    // Сотрудник DFC выдаёт/отзывает доступ (в т.ч. партнёрам). Всё пишется в аудит.
+
+    public record AdminGrant(string Email, string Role, string? DisplayName, DateTime? ExpiresAtUtc);
+
+    public async Task<(bool ok, string? error)> GrantAccessAsync(AdminGrant g, CancellationToken ct = default)
+    {
+        var role = Roles.Normalize(g.Role);
+        if (role is null) return (false, "Unknown role.");
+
+        var email = g.Email?.Trim();
+        if (string.IsNullOrWhiteSpace(email)) return (false, "Email is required.");
+
+        var existing = await _db.AdminUsers.FirstOrDefaultAsync(a => a.Email == email, ct);
+        if (existing is null)
+        {
+            _db.AdminUsers.Add(new AdminUser
+            {
+                Email = email,
+                Role = role,
+                DisplayName = string.IsNullOrWhiteSpace(g.DisplayName) ? null : g.DisplayName!.Trim(),
+                IsActive = true,
+                GrantedBy = _audit.ActorEmail,
+                GrantedAtUtc = DateTime.UtcNow,
+                ExpiresAtUtc = g.ExpiresAtUtc
+            });
+            _audit.Stage("AdminUser.Grant", "AdminUser", email, $"role={role}");
+        }
+        else
+        {
+            existing.Role = role;
+            existing.DisplayName = string.IsNullOrWhiteSpace(g.DisplayName) ? null : g.DisplayName!.Trim();
+            existing.IsActive = true;
+            existing.GrantedBy = _audit.ActorEmail;
+            existing.GrantedAtUtc = DateTime.UtcNow;
+            existing.ExpiresAtUtc = g.ExpiresAtUtc;
+            _audit.Stage("AdminUser.Update", "AdminUser", email, $"role={role}");
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return (true, null);
+    }
+
+    public async Task SetAdminActiveAsync(int adminUserId, bool active, CancellationToken ct = default)
+    {
+        var a = await _db.AdminUsers.FirstOrDefaultAsync(x => x.AdminUserId == adminUserId, ct);
+        if (a is null) return;
+        a.IsActive = active;
+        _audit.Stage(active ? "AdminUser.Reactivate" : "AdminUser.Revoke", "AdminUser", a.Email);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteAdminUserAsync(int adminUserId, CancellationToken ct = default)
+    {
+        var email = await _db.AdminUsers.Where(x => x.AdminUserId == adminUserId)
+            .Select(x => x.Email).FirstOrDefaultAsync(ct);
+        if (email is null) return;
+
+        await _db.AdminUsers.Where(x => x.AdminUserId == adminUserId).ExecuteDeleteAsync(ct);
+        _audit.Stage("AdminUser.Delete", "AdminUser", email);
+        await _db.SaveChangesAsync(ct);
+    }
 }

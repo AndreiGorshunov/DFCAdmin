@@ -11,6 +11,8 @@ public class AppDbContext : DbContext
     public DbSet<FamilyMember> FamilyMembers => Set<FamilyMember>();
     public DbSet<EventRegistration> EventRegistrations => Set<EventRegistration>();
     public DbSet<RegistrationParticipant> RegistrationParticipants => Set<RegistrationParticipant>();
+    public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
+    public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -71,6 +73,29 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(x => x.FamilyMemberId)
              .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        b.Entity<AdminUser>(e =>
+        {
+            e.ToTable("AdminUsers", "dbo");
+            e.HasKey(x => x.AdminUserId);
+            e.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Role).HasMaxLength(32).IsRequired();
+            e.Property(x => x.DisplayName).HasMaxLength(200);
+            e.Property(x => x.GrantedBy).HasMaxLength(256);
+            e.HasIndex(x => x.Email).IsUnique();
+        });
+
+        b.Entity<AuditEntry>(e =>
+        {
+            e.ToTable("AuditLog", "dbo");
+            e.HasKey(x => x.AuditId);
+            e.Property(x => x.ActorEmail).HasMaxLength(256);
+            e.Property(x => x.Action).HasMaxLength(64).IsRequired();
+            e.Property(x => x.EntityType).HasMaxLength(64);
+            e.Property(x => x.EntityId).HasMaxLength(64);
+            e.Property(x => x.Details).HasMaxLength(1024);
+            e.HasIndex(x => x.WhenUtc);
         });
     }
 }

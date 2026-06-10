@@ -28,6 +28,11 @@
                     <a asp-page="/Events/Index">Events</a>
                 }
                 <a asp-page="/Reports/Tshirts">T-shirt report</a>
+                @if (isAdmin)
+                {
+                    <a asp-page="/Admins/Index">Admins</a>
+                    <a asp-page="/Audit/Index">Audit</a>
+                }
             </nav>
             <span class="userbox">
                 <span class="who">@User.Identity!.Name</span>

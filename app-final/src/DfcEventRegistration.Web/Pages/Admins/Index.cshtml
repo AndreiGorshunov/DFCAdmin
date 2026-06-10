@@ -1,0 +1,101 @@
+@page
+@model DfcEventRegistration.Web.Pages.Admins.IndexModel
+@{
+    ViewData["Title"] = "Access management";
+}
+
+<h1>Access management</h1>
+<p class="muted">DFC staff grant and revoke access here. Partners get the <strong>Partner</strong> role (search &amp; reports, read-only). Roles take effect at the user's next sign-in.</p>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="flash ok">@Model.Notice</div>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+<div asp-validation-summary="All"></div>
+
+<!-- ============ Grant / update access ============ -->
+<form method="post" asp-page-handler="Grant" class="card">
+    <h2>Grant access</h2>
+    <p class="muted small">If the email already exists, its role/expiry is updated and access is re-activated.</p>
+    <div class="grid2">
+        <label>Email<input asp-for="Input.Email" placeholder="person@example.com" /></label>
+        <label>Role
+            <select asp-for="Input.Role">
+                @foreach (var r in Model.AllRoles)
+                {
+                    <option value="@r">@r</option>
+                }
+            </select>
+        </label>
+        <label>Display name (optional)<input asp-for="Input.DisplayName" /></label>
+        <label>Expires (UTC, optional)
+            <input type="datetime-local" asp-for="Input.ExpiresAtUtc" />
+        </label>
+    </div>
+    <div class="actions">
+        <button type="submit" class="btn-primary">Grant / update</button>
+    </div>
+</form>
+
+<!-- ============ Current access list ============ -->
+<div class="card">
+    <h2>Who has access</h2>
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Email</th><th>Role</th><th>Name</th><th>Status</th>
+                <th>Granted by</th><th>Granted (UTC)</th><th>Expires (UTC)</th><th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Users.Count == 0)
+            {
+                <tr><td colspan="8" class="muted center">No access records. Add one above.</td></tr>
+            }
+            @foreach (var u in Model.Users)
+            {
+                var expired = u.ExpiresAtUtc is DateTime ex && ex <= DateTime.UtcNow;
+                <tr>
+                    <td>@u.Email</td>
+                    <td>@u.Role</td>
+                    <td>@(string.IsNullOrEmpty(u.DisplayName) ? "—" : u.DisplayName)</td>
+                    <td>
+                        @if (!u.IsActive) { <span class="muted">Revoked</span> }
+                        else if (expired) { <span class="muted">Expired</span> }
+                        else { <strong>Active</strong> }
+                    </td>
+                    <td>@(string.IsNullOrEmpty(u.GrantedBy) ? "—" : u.GrantedBy)</td>
+                    <td>@u.GrantedAtUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@(u.ExpiresAtUtc?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                    <td class="row-actions">
+                        @if (u.IsActive)
+                        {
+                            <form method="post" asp-page-handler="Toggle" class="inline-form">
+                                <input type="hidden" name="id" value="@u.AdminUserId" />
+                                <input type="hidden" name="active" value="false" />
+                                <button type="submit" class="btn-link">Revoke</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <form method="post" asp-page-handler="Toggle" class="inline-form">
+                                <input type="hidden" name="id" value="@u.AdminUserId" />
+                                <input type="hidden" name="active" value="true" />
+                                <button type="submit" class="btn-link">Reactivate</button>
+                            </form>
+                        }
+                        <form method="post" asp-page-handler="Delete"
+                              onsubmit="return confirm('Delete the access record for @u.Email?');">
+                            <input type="hidden" name="id" value="@u.AdminUserId" />
+                            <button type="submit" class="link-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

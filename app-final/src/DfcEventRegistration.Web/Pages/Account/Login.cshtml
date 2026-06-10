@@ -14,32 +14,38 @@
     <link rel="stylesheet" href="~/css/forms.css" asp-append-version="true" />
 </head>
 <body>
-    <main class="container" style="max-width:420px;margin:10vh auto;">
+    <main class="container" style="max-width:440px;margin:10vh auto;">
         <h1>DFC 2026 · Admin</h1>
 
         @if (Model.DevMode)
         {
             <div class="card">
                 <h2>Developer sign-in</h2>
-                <p class="muted small">No identity provider is wired yet. Pick a role to sign in for testing.</p>
+                <p class="muted small">No identity provider is wired yet. Sign in as a seeded user to test roles — the role comes from the AdminUsers table.</p>
 
-                <form method="post" asp-page="/Account/Login">
-                    <input type="hidden" asp-for="ReturnUrl" />
-                    <label>Email
-                        <input asp-for="Email" />
-                    </label>
-                    <label>Role
-                        <select asp-for="Role">
-                            @foreach (var r in LoginModel.AllRoles)
-                            {
-                                <option value="@r">@r</option>
-                            }
-                        </select>
-                    </label>
-                    <div class="actions">
-                        <button type="submit" class="btn-primary">Sign in (dev)</button>
-                    </div>
-                </form>
+                <div asp-validation-summary="All"></div>
+
+                @if (Model.KnownUsers.Count == 0)
+                {
+                    <p class="muted">No active access records found. Run <code>sql/05_auth.sql</code> to seed users.</p>
+                }
+                else
+                {
+                    <form method="post" asp-page="/Account/Login">
+                        <input type="hidden" asp-for="ReturnUrl" />
+                        <label>Sign in as
+                            <select asp-for="Email">
+                                @foreach (var u in Model.KnownUsers)
+                                {
+                                    <option value="@u.Email">@u.Email — @u.Role@(string.IsNullOrEmpty(u.DisplayName) ? "" : $" ({u.DisplayName})")</option>
+                                }
+                            </select>
+                        </label>
+                        <div class="actions">
+                            <button type="submit" class="btn-primary">Sign in (dev)</button>
+                        </div>
+                    </form>
+                }
             </div>
         }
         else

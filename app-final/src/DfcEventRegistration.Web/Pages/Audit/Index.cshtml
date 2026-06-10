@@ -1,0 +1,44 @@
+@page
+@model DfcEventRegistration.Web.Pages.Audit.IndexModel
+@{
+    ViewData["Title"] = "Audit log";
+}
+
+<h1>Audit log</h1>
+<p class="muted">Latest @DfcEventRegistration.Web.Pages.Audit.IndexModel.Take entries (most recent first). Every mutation is recorded with who did it.</p>
+
+<form method="get" class="card">
+    <div class="grid2">
+        <label>Actor contains<input name="Actor" value="@Model.Actor" placeholder="email" /></label>
+        <label>Action contains<input name="Action" value="@Model.Action" placeholder="e.g. Delete" /></label>
+    </div>
+    <div class="actions">
+        <button type="submit">Filter</button>
+        <a class="btn-secondary" asp-page="/Audit/Index">Reset</a>
+    </div>
+</form>
+
+<div class="card">
+    <table class="grid">
+        <thead>
+            <tr><th>When (UTC)</th><th>Actor</th><th>Action</th><th>Entity</th><th>Id</th><th>Details</th></tr>
+        </thead>
+        <tbody>
+            @if (Model.Entries.Count == 0)
+            {
+                <tr><td colspan="6" class="muted center">No audit entries match.</td></tr>
+            }
+            @foreach (var e in Model.Entries)
+            {
+                <tr>
+                    <td>@e.WhenUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    <td>@(string.IsNullOrEmpty(e.ActorEmail) ? "—" : e.ActorEmail)</td>
+                    <td>@e.Action</td>
+                    <td>@(string.IsNullOrEmpty(e.EntityType) ? "—" : e.EntityType)</td>
+                    <td>@(string.IsNullOrEmpty(e.EntityId) ? "—" : e.EntityId)</td>
+                    <td>@(string.IsNullOrEmpty(e.Details) ? "—" : e.Details)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

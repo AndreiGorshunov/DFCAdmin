@@ -86,7 +86,7 @@
                 <td>@c.ParentFirstName @c.ParentLastName</td>
                 <td>@c.ParentEmail</td>
                 <td>@c.GroupCode</td>
-                <td>@if (isAdmin) { <a asp-page="/Registrants/Edit" asp-route-id="@c.RegistrationId">Registration</a> }</td>
+                <td>@if (isAdmin) { <a asp-page="/Registrants/Edit" asp-route-id="@c.RegistrationId">Registration</a> } else { <a asp-page="/Registrants/Details" asp-route-id="@c.RegistrationId">View</a> }</td>
             </tr>
         }
     </tbody>

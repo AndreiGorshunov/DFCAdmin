@@ -79,3 +79,32 @@ public class RegistrationParticipant
     public EventRegistration Registration { get; set; } = null!;
     public FamilyMember? FamilyMember { get; set; }
 }
+
+/// <summary>
+/// Кто имеет доступ в админку и с какой ролью. Источник истины для ролей
+/// (IdP аутентифицирует личность, роль приложения назначается здесь).
+/// Сотрудник DFC выдаёт доступ партнёрам (GrantedBy/ExpiresAtUtc).
+/// </summary>
+public class AdminUser
+{
+    public int AdminUserId { get; set; }
+    public string Email { get; set; } = "";
+    public string Role { get; set; } = "";            // 'Admin' | 'Partner'
+    public string? DisplayName { get; set; }
+    public bool IsActive { get; set; } = true;
+    public string? GrantedBy { get; set; }            // email сотрудника, выдавшего доступ
+    public DateTime GrantedAtUtc { get; set; }
+    public DateTime? ExpiresAtUtc { get; set; }        // null = бессрочно (для партнёров обычно ограничивают)
+}
+
+/// <summary>Журнал аудита: кто/когда/что сделал (все мутации/удаления).</summary>
+public class AuditEntry
+{
+    public long AuditId { get; set; }
+    public DateTime WhenUtc { get; set; }
+    public string? ActorEmail { get; set; }
+    public string Action { get; set; } = "";          // напр. 'Registration.Delete'
+    public string? EntityType { get; set; }
+    public string? EntityId { get; set; }
+    public string? Details { get; set; }
+}
