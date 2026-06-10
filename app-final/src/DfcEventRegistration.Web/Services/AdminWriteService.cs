@@ -28,6 +28,21 @@ public class AdminWriteService
         return TshirtSizes.Contains(upper) ? upper : t;
     }
 
+    /// <summary>Возраст совершеннолетия родителя/пользователя.</summary>
+    public const int AdultAge = 18;
+
+    /// <summary>Валидация даты рождения: не в будущем; для пользователя (родителя) — 18+ на сегодня.
+    /// Null допускается (DOB необязателен). Возвращает текст ошибки или null.</summary>
+    private static string? ValidateDob(DateTime? dob, bool requireAdult)
+    {
+        if (dob is null) return null;
+        var today = DateTime.Today;
+        if (dob.Value.Date > today) return "Date of birth cannot be in the future.";
+        if (requireAdult && dob.Value.Date > today.AddYears(-AdultAge))
+            return $"The user (parent) must be at least {AdultAge} years old.";
+        return null;
+    }
+
     // ======================= Registrant (User + Registration) =======================
 
     public record RegistrantEdit(
@@ -41,9 +56,13 @@ public class AdminWriteService
         bool dupe = await _db.Users.AnyAsync(u => u.Email == e.Email && u.UserId != e.UserId, ct);
         if (dupe) return (false, "This email is already used by another registrant.");
 
+        if (ValidateDob(e.DateOfBirth, requireAdult: true) is string dobErr) return (false, dobErr);
+
         var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == e.UserId, ct);
         var reg = await _db.EventRegistrations.FirstOrDefaultAsync(r => r.RegistrationId == e.RegistrationId, ct);
         if (user is null || reg is null) return (false, "Record not found.");
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         // ВАЖНО: правка имени/email/телефона меняет ПЕРСОНУ — отражается во всех её регистрациях.
         user.FirstName = e.FirstName;
@@ -59,6 +78,14 @@ public class AdminWriteService
         reg.EmergencyContactPhone = e.EmergencyContactPhone;
 
         await _db.SaveChangesAsync(ct);
+
+        // Денормализация (Вариант B): держим RegistrantLastName в актуальном состоянии
+        // во ВСЕХ регистрациях персоны (листинг сортируется/сикается по этой колонке). Set-based.
+        await _db.EventRegistrations
+            .Where(r => r.UserId == e.UserId)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.RegistrantLastName, e.LastName), ct);
+
+        await tx.CommitAsync(ct);
         return (true, null);
     }
 
@@ -119,6 +146,8 @@ public class AdminWriteService
         bool dupe = await _db.Users.AnyAsync(u => u.Email == email, ct);  // UX_Users_Email
         if (dupe) return (false, "This email is already in use.", 0);
 
+        if (ValidateDob(dob, requireAdult: true) is string dobErr) return (false, dobErr, 0);
+
         var u = new User { FirstName = firstName, LastName = lastName, Email = email, Phone = phone, DateOfBirth = dob };
         _db.Users.Add(u);
         await _db.SaveChangesAsync(ct);
@@ -130,8 +159,12 @@ public class AdminWriteService
         bool dupe = await _db.Users.AnyAsync(u => u.Email == e.Email && u.UserId != e.UserId, ct);
         if (dupe) return (false, "This email is already used by another user.");
 
+        if (ValidateDob(e.DateOfBirth, requireAdult: true) is string dobErr) return (false, dobErr);
+
         var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == e.UserId, ct);
         if (user is null) return (false, "User not found.");
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         // Правка персоны отражается во всех её регистрациях.
         user.FirstName = e.FirstName;
@@ -141,6 +174,13 @@ public class AdminWriteService
         user.DateOfBirth = e.DateOfBirth;
 
         await _db.SaveChangesAsync(ct);
+
+        // Денормализация (Вариант B): синхронизируем RegistrantLastName во всех регистрациях персоны.
+        await _db.EventRegistrations
+            .Where(r => r.UserId == e.UserId)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.RegistrantLastName, e.LastName), ct);
+
+        await tx.CommitAsync(ct);
         return (true, null);
     }
 
@@ -255,6 +295,8 @@ public class AdminWriteService
         var fm = await _db.FamilyMembers.FirstOrDefaultAsync(f => f.FamilyMemberId == e.FamilyMemberId, ct);
         if (fm is null) return (false, "Family member not found.");
 
+        if (ValidateDob(e.DateOfBirth, requireAdult: false) is string dobErr) return (false, dobErr);
+
         fm.FirstName = e.FirstName;
         fm.LastName = e.LastName;
         fm.DateOfBirth = e.DateOfBirth;
@@ -274,6 +316,8 @@ public class AdminWriteService
         if (count >= MaxChildrenPerUser)
             return (false, $"This person already has the maximum of {MaxChildrenPerUser} family members. " +
                            "Remove one before adding another.");
+
+        if (ValidateDob(dateOfBirth, requireAdult: false) is string dobErr) return (false, dobErr);
 
         _db.FamilyMembers.Add(new FamilyMember
         {

@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Edit family member";
     var backId = Model.RegId;
+    var todayMax = DateTime.Today.ToString("yyyy-MM-dd");
 }
 
 <p class="muted">
@@ -38,7 +39,7 @@
         <label>First name<input asp-for="Input.FirstName" /></label>
         <label>Last name<input asp-for="Input.LastName" /></label>
         <label>Date of birth
-            <input type="date" name="Input.DateOfBirth" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
+            <input type="date" name="Input.DateOfBirth" max="@todayMax" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
         </label>
     </div>
     <div class="actions">

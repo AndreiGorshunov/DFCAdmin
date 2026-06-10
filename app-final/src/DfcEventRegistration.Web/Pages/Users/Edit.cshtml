@@ -1,7 +1,10 @@
 @page
 @model DfcEventRegistration.Web.Pages.Users.EditModel
+@using DfcEventRegistration.Web.Data
 @{
     ViewData["Title"] = "Edit user";
+    var adultMax = DateTime.Today.AddYears(-DfcEventRegistration.Web.Services.AdminWriteService.AdultAge).ToString("yyyy-MM-dd");
+    var todayMax = DateTime.Today.ToString("yyyy-MM-dd");
 }
 
 <p class="muted"><a asp-page="/Users/Index">‹ Back to users</a></p>
@@ -32,13 +35,40 @@
         <label>Email<input asp-for="Input.Email" /></label>
         <label>Phone<input asp-for="Input.Phone" /></label>
         <label>Date of birth
-            <input type="date" name="Input.DateOfBirth" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
+            <input type="date" name="Input.DateOfBirth" max="@adultMax" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
         </label>
     </div>
     <div class="actions">
         <button type="submit" class="btn-primary">Save changes</button>
     </div>
 </form>
+
+<!-- ============ Registrations ============ -->
+<div class="card">
+    <h2>Registrations <span class="muted small">(@Model.RegistrationCount)</span></h2>
+    @if (Model.Registrations.Count == 0)
+    {
+        <p class="muted">This user has no registrations.</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>Event</th><th>Status</th><th>Registered</th><th>Group</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var r in Model.Registrations)
+                {
+                    <tr>
+                        <td>@r.EventName</td>
+                        <td>@r.Status</td>
+                        <td>@r.RegistrationDate.ToString("yyyy-MM-dd")</td>
+                        <td>@r.GroupCode</td>
+                        <td><a asp-page="/Registrants/Edit" asp-route-id="@r.RegistrationId">Open registration #@r.RegistrationId ›</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
 
 <!-- ============ Family roster ============ -->
 <div class="card">
@@ -98,7 +128,7 @@
                 <label>First name<input asp-for="Input.NewFamilyFirstName" required /></label>
                 <label>Last name<input asp-for="Input.NewFamilyLastName" required /></label>
                 <label>Date of birth *
-                    <input type="date" name="Input.NewFamilyDateOfBirth" required value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
+                    <input type="date" name="Input.NewFamilyDateOfBirth" max="@todayMax" required value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
                 </label>
             </div>
             <div class="actions">

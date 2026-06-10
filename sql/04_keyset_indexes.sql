@@ -16,7 +16,7 @@ GO
    Keyset корректен, но seek через JOIN оптимизатор не всегда свернёт в один
    проход (LastName в Users, RegistrationId в EventRegistrations).
    ============================================================================= */
-
+/*
 -- Фильтры EventId/Status + покрытие частых колонок (без обращения к куче).
 IF NOT EXISTS (SELECT 1 FROM sys.indexes
                WHERE name = N'IX_ER_Event_Status'
@@ -34,6 +34,7 @@ CREATE INDEX IX_Users_LastName
     ON dbo.Users (LastName, UserId)
     INCLUDE (FirstName, Email, Phone);
 GO
+*/
 
 /* =============================================================================
    ВАРИАНТ B — рекомендуется для read-heavy листинга (денормализация фамилии)
@@ -47,7 +48,7 @@ GO
    Поэтому Вариант B по умолчанию ЗАКОММЕНТИРОВАН — включай осознанно.
    ============================================================================= */
 
-/*
+
 IF COL_LENGTH(N'dbo.EventRegistrations', N'RegistrantLastName') IS NULL
     ALTER TABLE dbo.EventRegistrations ADD RegistrantLastName nvarchar(100) NULL;
 GO
@@ -74,7 +75,7 @@ GO
 --     (в приложении, в той же транзакции);
 --   * если фамилии редактируются в Users и это должно отражаться в листинге —
 --     триггер AFTER UPDATE на Users(LastName), синхронизирующий EventRegistrations.
-*/
+
 
 /* =============================================================================
    ОПЦИОНАЛЬНО — full-text поиск по ИМЕНАМ (ускоряет поиск вместо LIKE %term%)
@@ -85,7 +86,7 @@ GO
    добавлю; EF.Functions.Contains это всё ещё LIKE, не CONTAINS.
    ============================================================================= */
 
-/*
+
 IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'dfc_ft')
     CREATE FULLTEXT CATALOG dfc_ft AS DEFAULT;
 GO
@@ -96,7 +97,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes
         KEY INDEX PK_Users          -- уникальный single-column индекс на UserId
         WITH CHANGE_TRACKING = AUTO;
 GO
-*/
+
 
 /* =============================================================================
    ИЗМЕНЕНИЯ В КОДЕ ДЛЯ ВАРИАНТА B (если включаешь денормализацию)

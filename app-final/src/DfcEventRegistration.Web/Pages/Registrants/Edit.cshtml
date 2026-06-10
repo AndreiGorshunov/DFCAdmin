@@ -3,6 +3,8 @@
 @using DfcEventRegistration.Web.Data
 @{
     ViewData["Title"] = "Edit registrant";
+    var adultMax = DateTime.Today.AddYears(-DfcEventRegistration.Web.Services.AdminWriteService.AdultAge).ToString("yyyy-MM-dd");
+    var todayMax = DateTime.Today.ToString("yyyy-MM-dd");
 }
 
 <p class="muted"><a asp-page="/Registrants/Index">‹ Back to registrants</a></p>
@@ -36,7 +38,7 @@
         <label>Email<input asp-for="Input.Email" /></label>
         <label>Phone<input asp-for="Input.Phone" /></label>
         <label>Date of birth
-            <input type="date" name="Input.DateOfBirth" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
+            <input type="date" name="Input.DateOfBirth" max="@adultMax" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
         </label>
     </div>
 
@@ -195,7 +197,7 @@
                 <label>First name<input asp-for="Input.NewFamilyFirstName" required /></label>
                 <label>Last name<input asp-for="Input.NewFamilyLastName" required /></label>
                 <label>Date of birth *
-                    <input type="date" name="Input.NewFamilyDateOfBirth" required value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
+                    <input type="date" name="Input.NewFamilyDateOfBirth" max="@todayMax" required value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
                 </label>
             </div>
             <div class="actions">

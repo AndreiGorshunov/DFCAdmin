@@ -22,7 +22,10 @@ public class EditModel : PageModel
     [BindProperty] public InputModel Input { get; set; } = new();
 
     public IReadOnlyList<FamilyMember> Family { get; private set; } = Array.Empty<FamilyMember>();
+    public IReadOnlyList<RegRow> Registrations { get; private set; } = Array.Empty<RegRow>();
     public int RegistrationCount { get; private set; }
+
+    public record RegRow(long RegistrationId, string EventName, RegistrationStatus Status, DateTime RegistrationDate, string? GroupCode);
 
     public int MaxFamily => AdminWriteService.MaxChildrenPerUser;
     public bool FamilyLimitReached => Family.Count >= MaxFamily;
@@ -59,6 +62,12 @@ public class EditModel : PageModel
             .ToListAsync(ct);
 
         RegistrationCount = await _db.EventRegistrations.CountAsync(r => r.UserId == Id, ct);
+
+        Registrations = await _db.EventRegistrations.AsNoTracking()
+            .Where(r => r.UserId == Id)
+            .OrderByDescending(r => r.RegistrationDate)
+            .Select(r => new RegRow(r.RegistrationId, r.Event.Name, r.Status, r.RegistrationDate, r.GroupCode))
+            .ToListAsync(ct);
 
         if (fillInput)
         {
