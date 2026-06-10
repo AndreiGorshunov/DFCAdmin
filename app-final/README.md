@@ -72,6 +72,14 @@ dotnet run
 - Для фильтров пригодятся индексы `EventRegistrations(EventId, Status)` и покрытие под
   сортировку; их состав зависит от реальных паттернов запросов.
 
+## Известные ограничения (для прода)
+
+- **Конкурентность** — last-write-wins (нет `rowversion`).
+- **Auth** — экраны открыты; нужен `[Authorize]` + аутентификация (UAE Pass/OAuth).
+- **Разрывы спека↔схема** — нет `EventType` (Run/Ride/SUP/Yoga разделение bibs vs
+  venue check-in), `Slot/Route/Session`, t-shirt `stock` (берётся из конфига).
+  Подробности — в `app-final/README.md` и `CONVERSATION.md`.
+  
 ## Структура
 
 ```
