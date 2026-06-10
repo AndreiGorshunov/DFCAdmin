@@ -6,9 +6,13 @@
 }
 
 <p class="muted">
-    @if (backId is long rid)
+    @if (Model.RegId is long rid)
     {
         <a asp-page="/Registrants/Edit" asp-route-id="@rid">‹ Back to registrant</a>
+    }
+    else if (Model.UserId is int uid)
+    {
+        <a asp-page="/Users/Edit" asp-route-id="@uid">‹ Back to user</a>
     }
     else
     {
@@ -28,7 +32,7 @@
 }
 <div asp-validation-summary="All"></div>
 
-<form method="post" asp-page-handler="Save" asp-route-id="@Model.Id" asp-route-regId="@Model.RegId" class="card">
+<form method="post" asp-page-handler="Save" asp-route-id="@Model.Id" asp-route-regId="@Model.RegId" asp-route-userId="@Model.UserId" class="card">
     <input type="hidden" asp-for="Input.FamilyMemberId" />
     <div class="grid2">
         <label>First name<input asp-for="Input.FirstName" /></label>
@@ -48,7 +52,7 @@
             <strong>Delete family member</strong>
             <p class="muted small">Removes this person and detaches them from any registrations.</p>
         </div>
-        <form method="post" asp-page-handler="Delete" asp-route-id="@Model.Id" asp-route-regId="@Model.RegId"
+        <form method="post" asp-page-handler="Delete" asp-route-id="@Model.Id" asp-route-regId="@Model.RegId" asp-route-userId="@Model.UserId"
               onsubmit="return confirm('Delete this family member?');">
             <button type="submit" class="btn-danger">Delete</button>
         </form>

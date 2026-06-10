@@ -16,6 +16,10 @@ public class AdminWriteService
     /// <summary>Канонические размеры футболок (UI-список). В схеме TshirtSize — свободная строка.</summary>
     public static readonly string[] TshirtSizes = { "XS", "S", "M", "L", "XL", "XXL" };
 
+    /// <summary>Бизнес-правило: не более 3 членов семьи (детей) на одного пользователя.
+    /// Источник истины — серверная проверка в AddFamilyMemberAsync; UI лишь дублирует подсказкой/блокировкой.</summary>
+    public const int MaxChildrenPerUser = 3;
+
     private static string? NormalizeSize(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return null;
@@ -104,6 +108,41 @@ public class AdminWriteService
     public async Task<int> UserIdOfRegistrationAsync(long registrationId, CancellationToken ct = default)
         => await _db.EventRegistrations.Where(r => r.RegistrationId == registrationId)
                    .Select(r => r.UserId).FirstOrDefaultAsync(ct);
+
+    // ============================= Users (CRUD) =============================
+
+    public record UserEdit(int UserId, string FirstName, string LastName, string Email, string? Phone, DateTime? DateOfBirth);
+
+    public async Task<(bool ok, string? error, int id)> CreateUserAsync(
+        string firstName, string lastName, string email, string? phone, DateTime? dob, CancellationToken ct = default)
+    {
+        bool dupe = await _db.Users.AnyAsync(u => u.Email == email, ct);  // UX_Users_Email
+        if (dupe) return (false, "This email is already in use.", 0);
+
+        var u = new User { FirstName = firstName, LastName = lastName, Email = email, Phone = phone, DateOfBirth = dob };
+        _db.Users.Add(u);
+        await _db.SaveChangesAsync(ct);
+        return (true, null, u.UserId);
+    }
+
+    public async Task<(bool ok, string? error)> UpdateUserAsync(UserEdit e, CancellationToken ct = default)
+    {
+        bool dupe = await _db.Users.AnyAsync(u => u.Email == e.Email && u.UserId != e.UserId, ct);
+        if (dupe) return (false, "This email is already used by another user.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == e.UserId, ct);
+        if (user is null) return (false, "User not found.");
+
+        // Правка персоны отражается во всех её регистрациях.
+        user.FirstName = e.FirstName;
+        user.LastName = e.LastName;
+        user.Email = e.Email;
+        user.Phone = e.Phone;
+        user.DateOfBirth = e.DateOfBirth;
+
+        await _db.SaveChangesAsync(ct);
+        return (true, null);
+    }
 
     // ============================= Events (CRUD) =============================
 
@@ -224,19 +263,27 @@ public class AdminWriteService
         return (true, null);
     }
 
-    public async Task<int> AddFamilyMemberAsync(int userId, string firstName, string lastName,
+    public async Task<int> FamilyCountAsync(int userId, CancellationToken ct = default)
+        => await _db.FamilyMembers.CountAsync(f => f.UserId == userId, ct);
+
+    public async Task<(bool ok, string? error)> AddFamilyMemberAsync(int userId, string firstName, string lastName,
         DateTime? dateOfBirth, CancellationToken ct = default)
     {
-        var fm = new FamilyMember
+        // Серверный гард на лимит — единственный надёжный (UI можно обойти).
+        int count = await _db.FamilyMembers.CountAsync(f => f.UserId == userId, ct);
+        if (count >= MaxChildrenPerUser)
+            return (false, $"This person already has the maximum of {MaxChildrenPerUser} family members. " +
+                           "Remove one before adding another.");
+
+        _db.FamilyMembers.Add(new FamilyMember
         {
             UserId = userId,
             FirstName = firstName,
             LastName = lastName,
             DateOfBirth = dateOfBirth
-        };
-        _db.FamilyMembers.Add(fm);
+        });
         await _db.SaveChangesAsync(ct);
-        return fm.FamilyMemberId;
+        return (true, null);
     }
 
     /// <summary>Удалить члена семьи: сперва убрать его из всех регистраций (участники), затем строку.</summary>

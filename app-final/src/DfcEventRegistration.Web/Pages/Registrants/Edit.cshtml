@@ -169,20 +169,40 @@
         </table>
     }
 
-    <h3>Add family member to roster</h3>
-    <form method="post" asp-page-handler="AddFamily" asp-route-id="@Model.Id">
-        <input type="hidden" asp-for="Input.UserId" />
-        <div class="grid2">
-            <label>First name<input asp-for="Input.NewFamilyFirstName" /></label>
-            <label>Last name<input asp-for="Input.NewFamilyLastName" /></label>
-            <label>Date of birth
-                <input type="date" name="Input.NewFamilyDateOfBirth" value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
-            </label>
+    <h3>Add family member to roster <span class="muted small">(@Model.Family.Count / @Model.MaxFamily)</span></h3>
+    @if (Model.FamilyLimitReached)
+    {
+        <div class="flash warn">
+            Maximum of @Model.MaxFamily family members already added — remove one before adding another.
         </div>
-        <div class="actions">
-            <button type="submit" class="btn-secondary">Add to roster</button>
-        </div>
-    </form>
+        <form method="post" asp-page-handler="AddFamily" asp-route-id="@Model.Id">
+            <input type="hidden" asp-for="Input.UserId" />
+            <div class="grid2">
+                <label>First name<input asp-for="Input.NewFamilyFirstName" disabled /></label>
+                <label>Last name<input asp-for="Input.NewFamilyLastName" disabled /></label>
+                <label>Date of birth<input type="date" disabled /></label>
+            </div>
+            <div class="actions">
+                <button type="submit" class="btn-secondary" disabled>Add to roster</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="AddFamily" asp-route-id="@Model.Id">
+            <input type="hidden" asp-for="Input.UserId" />
+            <div class="grid2">
+                <label>First name<input asp-for="Input.NewFamilyFirstName" /></label>
+                <label>Last name<input asp-for="Input.NewFamilyLastName" /></label>
+                <label>Date of birth
+                    <input type="date" name="Input.NewFamilyDateOfBirth" value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
+                </label>
+            </div>
+            <div class="actions">
+                <button type="submit" class="btn-secondary">Add to roster</button>
+            </div>
+        </form>
+    }
 </div>
 
 <!-- ============ Danger zone ============ -->

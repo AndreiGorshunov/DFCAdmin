@@ -19,7 +19,8 @@ public class EditModel : PageModel
     }
 
     [BindProperty(SupportsGet = true)] public int Id { get; set; }        // FamilyMemberId
-    [BindProperty(SupportsGet = true)] public long? RegId { get; set; }   // куда вернуться
+    [BindProperty(SupportsGet = true)] public long? RegId { get; set; }   // вернуться на регистранта
+    [BindProperty(SupportsGet = true)] public int? UserId { get; set; }   // вернуться на пользователя
 
     [BindProperty] public InputModel Input { get; set; } = new();
     public string OwnerName { get; private set; } = "";
@@ -70,7 +71,9 @@ public class EditModel : PageModel
     }
 
     private IActionResult Back()
-        => RegId is long rid
-            ? RedirectToPage("/Registrants/Edit", new { Id = rid })
-            : RedirectToPage("/Registrants/Index");
+    {
+        if (RegId is long rid) return RedirectToPage("/Registrants/Edit", new { Id = rid });
+        if (UserId is int uid) return RedirectToPage("/Users/Edit", new { Id = uid });
+        return RedirectToPage("/Registrants/Index");
+    }
 }

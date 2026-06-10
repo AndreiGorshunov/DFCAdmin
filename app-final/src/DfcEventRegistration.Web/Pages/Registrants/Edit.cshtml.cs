@@ -33,6 +33,9 @@ public class EditModel : PageModel
 
     public string[] Sizes => AdminWriteService.TshirtSizes;
 
+    public int MaxFamily => AdminWriteService.MaxChildrenPerUser;
+    public bool FamilyLimitReached => Family.Count >= MaxFamily;
+
     public string? Error { get; set; }
     [TempData] public string? Notice { get; set; }
 
@@ -172,8 +175,10 @@ public class EditModel : PageModel
             return Page();
         }
 
-        await _write.AddFamilyMemberAsync(Input.UserId,
+        var (ok, err) = await _write.AddFamilyMemberAsync(Input.UserId,
             Input.NewFamilyFirstName!.Trim(), Input.NewFamilyLastName!.Trim(), Input.NewFamilyDateOfBirth, ct);
+
+        if (!ok) { Error = err; await LoadAsync(ct, fillInput: false); return Page(); }
 
         Notice = "Family member added to the roster.";
         return RedirectToPage(new { Id });

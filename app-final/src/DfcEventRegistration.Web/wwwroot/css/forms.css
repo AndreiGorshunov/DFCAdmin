@@ -85,6 +85,7 @@ label input:focus, label select:focus, label textarea:focus {
 }
 .flash.ok  { background: var(--green-bg); color: var(--green); }
 .flash.err { background: var(--red-bg);  color: var(--red); }
+.flash.warn { background: #fff7e6; color: #8a5a00; border: 1px solid #ffe1a8; }
 .flash:empty { display: none; }
 
 .field-err { color: var(--red); font-size: 0.8rem; }

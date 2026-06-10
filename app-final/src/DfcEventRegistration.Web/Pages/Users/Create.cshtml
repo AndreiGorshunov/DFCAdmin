@@ -1,0 +1,30 @@
+@page
+@model DfcEventRegistration.Web.Pages.Users.CreateModel
+@{
+    ViewData["Title"] = "New user";
+}
+
+<p class="muted"><a asp-page="/Users/Index">‹ Back to users</a></p>
+<h1>New user</h1>
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+<div asp-validation-summary="All"></div>
+
+<form method="post" class="card">
+    <div class="grid2">
+        <label>First name<input asp-for="Input.FirstName" /></label>
+        <label>Last name<input asp-for="Input.LastName" /></label>
+        <label>Email<input asp-for="Input.Email" /></label>
+        <label>Phone<input asp-for="Input.Phone" /></label>
+        <label>Date of birth
+            <input type="date" name="Input.DateOfBirth" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
+        </label>
+    </div>
+    <div class="actions">
+        <button type="submit" class="btn-primary">Create</button>
+    </div>
+    <p class="muted small">After creating you'll land on the edit page, where you can add family members (max @DfcEventRegistration.Web.Services.AdminWriteService.MaxChildrenPerUser).</p>
+</form>

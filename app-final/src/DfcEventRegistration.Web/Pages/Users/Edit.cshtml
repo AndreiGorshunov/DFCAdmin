@@ -1,0 +1,124 @@
+@page
+@model DfcEventRegistration.Web.Pages.Users.EditModel
+@{
+    ViewData["Title"] = "Edit user";
+}
+
+<p class="muted"><a asp-page="/Users/Index">‹ Back to users</a></p>
+<h1>Edit user</h1>
+<p class="muted">User #@Model.Id · @Model.RegistrationCount registration(s)</p>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="flash ok">@Model.Notice</div>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+<div asp-validation-summary="All"></div>
+
+<!-- ============ Person ============ -->
+<form method="post" asp-page-handler="Save" asp-route-id="@Model.Id" class="card">
+    <input type="hidden" asp-for="Input.UserId" />
+    <h2>Person</h2>
+    @if (Model.RegistrationCount > 0)
+    {
+        <p class="muted small">Editing name/email/phone updates this person across all @Model.RegistrationCount registration(s).</p>
+    }
+    <div class="grid2">
+        <label>First name<input asp-for="Input.FirstName" /></label>
+        <label>Last name<input asp-for="Input.LastName" /></label>
+        <label>Email<input asp-for="Input.Email" /></label>
+        <label>Phone<input asp-for="Input.Phone" /></label>
+        <label>Date of birth
+            <input type="date" name="Input.DateOfBirth" value="@(Model.Input.DateOfBirth?.ToString("yyyy-MM-dd"))" />
+        </label>
+    </div>
+    <div class="actions">
+        <button type="submit" class="btn-primary">Save changes</button>
+    </div>
+</form>
+
+<!-- ============ Family roster ============ -->
+<div class="card">
+    <h2>Family roster <span class="muted small">(@Model.Family.Count / @Model.MaxFamily)</span></h2>
+    <p class="muted small">The person's children. Max @Model.MaxFamily. Deleting removes them from every registration.</p>
+
+    @if (Model.Family.Count == 0)
+    {
+        <p class="muted">No family members yet.</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>First name</th><th>Last name</th><th>Date of birth</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var f in Model.Family)
+                {
+                    <tr>
+                        <td>@f.FirstName</td>
+                        <td>@f.LastName</td>
+                        <td>@(f.DateOfBirth?.ToString("yyyy-MM-dd"))</td>
+                        <td class="row-actions">
+                            <a asp-page="/FamilyMembers/Edit" asp-route-id="@f.FamilyMemberId" asp-route-userId="@Model.Id">Edit</a>
+                            <form method="post" asp-page-handler="DeleteFamily" asp-route-id="@Model.Id"
+                                  onsubmit="return confirm('Delete this family member? They will be removed from every registration.');">
+                                <input type="hidden" name="familyMemberId" value="@f.FamilyMemberId" />
+                                <button type="submit" class="link-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <h3>Add family member</h3>
+    @if (Model.FamilyLimitReached)
+    {
+        <div class="flash warn">
+            Maximum of @Model.MaxFamily family members already added — remove one before adding another.
+        </div>
+        <form method="post" asp-page-handler="AddFamily" asp-route-id="@Model.Id">
+            <div class="grid2">
+                <label>First name<input asp-for="Input.NewFamilyFirstName" disabled /></label>
+                <label>Last name<input asp-for="Input.NewFamilyLastName" disabled /></label>
+                <label>Date of birth<input type="date" disabled /></label>
+            </div>
+            <div class="actions">
+                <button type="submit" class="btn-secondary" disabled>Add to roster</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="AddFamily" asp-route-id="@Model.Id">
+            <div class="grid2">
+                <label>First name<input asp-for="Input.NewFamilyFirstName" /></label>
+                <label>Last name<input asp-for="Input.NewFamilyLastName" /></label>
+                <label>Date of birth
+                    <input type="date" name="Input.NewFamilyDateOfBirth" value="@(Model.Input.NewFamilyDateOfBirth?.ToString("yyyy-MM-dd"))" />
+                </label>
+            </div>
+            <div class="actions">
+                <button type="submit" class="btn-secondary">Add to roster</button>
+            </div>
+        </form>
+    }
+</div>
+
+<!-- ============ Danger zone ============ -->
+<div class="card danger">
+    <h2>Danger zone</h2>
+    <div class="danger-row">
+        <div>
+            <strong>Delete this user</strong>
+            <p class="muted small">Removes the person, all @Model.RegistrationCount registration(s), @Model.Family.Count family member(s) and their participants. Cannot be undone.</p>
+        </div>
+        <form method="post" asp-page-handler="DeleteUser" asp-route-id="@Model.Id"
+              onsubmit="return confirm('Delete this user and ALL related data (@Model.RegistrationCount registrations + @Model.Family.Count family members)? This cannot be undone.');">
+            <button type="submit" class="btn-danger">Delete user + all data</button>
+        </form>
+    </div>
+</div>

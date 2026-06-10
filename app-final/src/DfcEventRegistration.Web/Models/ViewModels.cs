@@ -83,3 +83,22 @@ public class TshirtReportRow
     public int OutstandingToCollect => Requested - Collected;
     public int? StockAfterCollection => Stock.HasValue ? Stock.Value - Collected : null;
 }
+
+// ===================== Users tab (грейн = пользователь/персона) =====================
+
+public class UserRow
+{
+    public int UserId { get; set; }
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string? Phone { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public int FamilyCount { get; set; }        // членов семьи в ростере
+    public int RegistrationCount { get; set; }  // регистраций персоны
+}
+
+public class UserFilter
+{
+    public string? Q { get; set; }
+}

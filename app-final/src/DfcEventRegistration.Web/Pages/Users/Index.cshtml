@@ -1,0 +1,109 @@
+@page
+@model DfcEventRegistration.Web.Pages.Users.IndexModel
+@{
+    ViewData["Title"] = "Users";
+
+    var baseRoute = new Dictionary<string, string>();
+    if (!string.IsNullOrWhiteSpace(Model.Q)) baseRoute["Q"] = Model.Q!;
+    baseRoute["PageSize"] = Model.PageSize.ToString();
+
+    Dictionary<string, string> Sortable(string col)
+    {
+        var d = new Dictionary<string, string>(baseRoute);
+        d["Sort"] = col;
+        d["Dir"] = Model.NextDir(col);
+        return d;
+    }
+
+    var pagerBase = new Dictionary<string, string>(baseRoute);
+    if (!string.IsNullOrEmpty(Model.Sort)) pagerBase["Sort"] = Model.Sort!;
+    if (!string.IsNullOrEmpty(Model.Dir)) pagerBase["Dir"] = Model.Dir!;
+}
+
+<h1>Users</h1>
+<p class="muted small">Грейн = персона (а не регистрация). Здесь живёт CRUD пользователя и его ростер семьи.</p>
+
+<form method="get" class="filters">
+    <input type="text" name="Q" value="@Model.Q" placeholder="Name / email / phone…" />
+    <select name="PageSize">
+        @foreach (var n in new[] { 25, 50, 100, 200 })
+        {
+            <option value="@n" selected="@(Model.PageSize == n)">@n / page</option>
+        }
+    </select>
+    <button type="submit">Apply</button>
+    <a class="btn-secondary" asp-page="/Users/Index">Reset</a>
+    <button type="button" id="userCountBtn" class="btn-secondary">Count ▷</button>
+    <a class="btn-primary" asp-page="/Users/Create">+ New user</a>
+</form>
+
+<p class="muted" id="userCountResult" aria-live="polite"></p>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th><a asp-page="/Users/Index" asp-all-route-data='Sortable("last")'>Last name@(Model.SortIndicator("last"))</a></th>
+            <th><a asp-page="/Users/Index" asp-all-route-data='Sortable("first")'>First name@(Model.SortIndicator("first"))</a></th>
+            <th><a asp-page="/Users/Index" asp-all-route-data='Sortable("email")'>Email@(Model.SortIndicator("email"))</a></th>
+            <th>Phone</th>
+            <th>Date of birth</th>
+            <th class="num"><a asp-page="/Users/Index" asp-all-route-data='Sortable("family")'>Family@(Model.SortIndicator("family"))</a></th>
+            <th class="num"><a asp-page="/Users/Index" asp-all-route-data='Sortable("regs")'>Regs@(Model.SortIndicator("regs"))</a></th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="8" class="muted center">No users match the filters.</td></tr>
+        }
+        @foreach (var u in Model.Rows)
+        {
+            <tr>
+                <td>@u.LastName</td>
+                <td>@u.FirstName</td>
+                <td>@u.Email</td>
+                <td>@u.Phone</td>
+                <td>@(u.DateOfBirth?.ToString("yyyy-MM-dd"))</td>
+                <td class="num">@u.FamilyCount</td>
+                <td class="num">@u.RegistrationCount</td>
+                <td><a asp-page="/Users/Edit" asp-route-id="@u.UserId">Edit</a></td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<div class="pager">
+    @if (Model.PageNo > 1)
+    {
+        var prev = new Dictionary<string, string>(pagerBase) { ["PageNo"] = (Model.PageNo - 1).ToString() };
+        <a asp-page="/Users/Index" asp-all-route-data="prev">‹ Prev</a>
+    }
+    <span>Page @Model.PageNo</span>
+    @if (Model.HasNext)
+    {
+        var next = new Dictionary<string, string>(pagerBase) { ["PageNo"] = (Model.PageNo + 1).ToString() };
+        <a asp-page="/Users/Index" asp-all-route-data="next">Next ›</a>
+    }
+</div>
+
+<script>
+    document.getElementById('userCountBtn').addEventListener('click', async function () {
+        var form = document.querySelector('form.filters');
+        var params = new URLSearchParams();
+        params.set('handler', 'Count');
+        var q = form.querySelector('[name="Q"]').value.trim();
+        if (q) params.set('Q', q);
+
+        var out = document.getElementById('userCountResult');
+        out.textContent = 'Counting…';
+        try {
+            var r = await fetch('?' + params.toString(), { headers: { 'Accept': 'application/json' } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            var n = await r.json();
+            out.textContent = n.toLocaleString() + ' users match the current filter.';
+        } catch (e) {
+            out.textContent = 'Count failed — try again.';
+        }
+    });
+</script>
