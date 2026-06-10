@@ -21,6 +21,16 @@ SET XACT_ABORT ON;
 SET NOCOUNT ON;
 GO
 
+IF NOT EXISTS (
+    SELECT 1 
+    FROM sys.databases 
+    WHERE name = 'dfc.EventRegistration'
+)
+BEGIN
+    CREATE DATABASE [dfc.EventRegistration];
+END
+GO
+
 /* -----------------------------------------------------------------------------
    Схема (по желанию вынести в отдельную; здесь используем dbo)
    -------------------------------------------------------------------------- */
