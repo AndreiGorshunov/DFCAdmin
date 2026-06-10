@@ -1,6 +1,7 @@
 using DfcEventRegistration.Web.Data;
 using DfcEventRegistration.Web.Models;
 using DfcEventRegistration.Web.Services;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -76,6 +77,36 @@ public class IndexModel : PageModel
         return File(bytes,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"registrants_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
+    }
+
+    /// <summary>
+    /// Полная выгрузка ВСЕХ строк (учитывает фильтры) в CSV — потоково, без лимита и без буфера.
+    /// Один плоский файл, открывается Excel/Power Query. Рекомендуемый путь для миллионов строк.
+    /// </summary>
+    public async Task<IActionResult> OnGetExportAllCsvAsync([FromServices] StreamingExportService streamer, CancellationToken ct)
+    {
+        Response.ContentType = "text/csv; charset=utf-8";
+        Response.Headers["Content-Disposition"] =
+            $"attachment; filename=\"registrants_all_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv\"";
+        HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+
+        await streamer.WriteCsvAsync(Filter(), Response.Body, ct);
+        return new EmptyResult();
+    }
+
+    /// <summary>
+    /// Полная выгрузка ВСЕХ строк в один .xlsx с автопереносом на новые листы (~1М/лист,
+    /// хард-лимит Excel). Пишется потоково на диск, затем отдаётся файл стримом.
+    /// </summary>
+    public async Task<IActionResult> OnGetExportAllXlsxAsync([FromServices] StreamingExportService streamer, CancellationToken ct)
+    {
+        var path = await streamer.WriteXlsxTempAsync(Filter(), ct);
+        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+            bufferSize: 1 << 16, FileOptions.DeleteOnClose | FileOptions.Asynchronous);
+
+        return File(stream,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"registrants_all_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
     }
 
     private RegistrantFilter Filter() => new() { Q = Q, EventId = EventId, Status = Status, ParticipantType = ParticipantType };

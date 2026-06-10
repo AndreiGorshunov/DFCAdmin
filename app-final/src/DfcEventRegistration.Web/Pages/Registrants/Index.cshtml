@@ -29,6 +29,15 @@
     var sortGroup   = With(("Sort", "groupcode"), ("Dir", Model.NextDir("groupcode")));
     var sortEvent   = With(("Sort", "event"),     ("Dir", Model.NextDir("event")));
     var sortChecked = With(("Sort", "checkedin"), ("Dir", Model.NextDir("checkedin")));
+
+    // Подтверждение для полной выгрузки: текст зависит от того, выбраны ли фильтры.
+    bool anyFilter = !string.IsNullOrWhiteSpace(Model.Q)
+        || Model.EventId is not null
+        || Model.Status is not null
+        || Model.ParticipantType is not null;
+    var exportConfirm = anyFilter
+        ? "Download ALL rows matching the current filters? This may be large and take a while."
+        : "No filters are applied — this will download EVERY registrant (potentially millions of rows) and can be very large and slow. Continue?";
 }
 
 <h1>Registrants</h1>
@@ -74,7 +83,13 @@
     <a class="btn-secondary" asp-page="/Registrants/Index">Reset</a>
     <button type="button" id="countBtn" class="btn-secondary">Count ▷</button>
     <a class="btn-export" asp-page="/Registrants/Index" asp-page-handler="Export"
-       asp-all-route-data="exportRoute">⬇ Export to Excel</a>
+       asp-all-route-data="exportRoute" title="Quick export, capped at 100k rows, single sheet">⬇ Excel (≤100k)</a>
+    <a class="btn-export" asp-page="/Registrants/Index" asp-page-handler="ExportAllCsv"
+       asp-all-route-data="exportRoute" title="All rows, streamed, no limit (recommended)"
+       onclick="return confirm('@exportConfirm');">⬇ Export all (CSV)</a>
+    <a class="btn-export" asp-page="/Registrants/Index" asp-page-handler="ExportAllXlsx"
+       asp-all-route-data="exportRoute" title="All rows, streamed into one .xlsx (~1M per sheet)"
+       onclick="return confirm('@exportConfirm');">⬇ Export all (Excel)</a>
 </form>
 
 <p class="muted" id="countResult" aria-live="polite"></p>
