@@ -75,7 +75,8 @@ public sealed class UserSearchService
 
     // Маршрутизация по форме ввода (чтобы не сканировать всё подряд и быть сарджабельным):
     //   '@'            -> email: префикс по UX_Users_Email (index seek);
-    //   цифры без букв -> телефон: подстрока по узкому IX_Users_Phone (не кластерный скан);
+    //   цифры без букв -> телефон: «оканчивается на N цифр» = префикс по развёрнутым
+    //                    цифрам (seek по IX_Users_PhoneDigitsRev, а не подстрочный скан);
     //   иначе          -> имя: full-text CONTAINS (токены AND, префиксно, First|Last).
     // Контактные и именной пути не смешиваем: запрос обычно одного намерения, а раздельность
     // даёт сарджабельность и убирает лишние сканы ~всех Users.
@@ -85,7 +86,12 @@ public sealed class UserSearchService
             return _db.Users.Where(u => u.Email.StartsWith(raw)).Select(u => u.UserId);
 
         if (raw.Any(char.IsDigit) && !raw.Any(char.IsLetter))
-            return _db.Users.Where(u => u.Phone != null && u.Phone.Contains(raw)).Select(u => u.UserId);
+        {
+            // Развёрнутые цифры ввода: PhoneDigitsRev LIKE rev + '%' <=> телефон оканчивается на эти цифры.
+            var rev = new string(raw.Where(char.IsDigit).Reverse().ToArray());
+            return _db.Users.Where(u => u.PhoneDigitsRev != null && u.PhoneDigitsRev.StartsWith(rev))
+                            .Select(u => u.UserId);
+        }
 
         var tokens = Tokenize(raw);
         if (tokens.Count == 0)

@@ -22,6 +22,11 @@ public class User
     public string Email { get; set; } = "";
     public string? Phone { get; set; }
     public DateTime? DateOfBirth { get; set; }
+
+    // Вычисляемая (PERSISTED) колонка в БД: цифры телефона в обратном порядке.
+    // Делает поиск «телефон оканчивается на N цифр» префиксным (seek по IX_Users_PhoneDigitsRev).
+    // Только чтение: значение поддерживает БД (HasComputedColumnSql), EF не пишет.
+    public string? PhoneDigitsRev { get; private set; }
 }
 
 public class Event

@@ -18,6 +18,12 @@ public class AppDbContext : DbContext
         {
             e.ToTable("Users", "dbo");
             e.HasKey(x => x.UserId);
+            // PERSISTED-вычисляемая колонка (создаётся в 01/04). EF трактует как store-generated:
+            // не пишет при INSERT/UPDATE, только читает. SQL дублирует определение в схеме.
+            e.Property(x => x.PhoneDigitsRev)
+             .HasComputedColumnSql(
+                 "REVERSE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE([Phone],'+',''),' ',''),'-',''),'(',''),')',''))",
+                 stored: true);
         });
 
         b.Entity<Event>(e =>

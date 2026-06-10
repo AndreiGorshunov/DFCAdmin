@@ -51,6 +51,10 @@ BEGIN
         Phone        NVARCHAR(32)   NULL,
         DateOfBirth  DATE           NULL,
 
+        -- Цифры телефона в обратном порядке (PERSISTED). Поиск «оканчивается на N цифр»
+        -- = префикс по этой колонке (seek), а не подстрочный скан Phone LIKE '%x%'.
+        PhoneDigitsRev AS REVERSE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(Phone,'+',''),' ',''),'-',''),'(',''),')','')) PERSISTED,
+
         CONSTRAINT PK_Users PRIMARY KEY CLUSTERED (UserId)
     );
 
@@ -58,9 +62,8 @@ BEGIN
     -- Убери, если допускаются дубли e-mail.
     CREATE UNIQUE INDEX UX_Users_Email ON dbo.Users (Email);
 
-    -- Поиск по телефону: узкий NC-индекс, чтобы Phone LIKE '%x%' сканировал
-    -- (Phone, UserId), а не кластерную таблицу. Фильтрованный — пропускаем NULL-телефоны.
-    CREATE INDEX IX_Users_Phone ON dbo.Users (Phone) WHERE Phone IS NOT NULL;
+    -- Поиск по телефону «по последним цифрам»: префикс по развёрнутым цифрам = seek.
+    CREATE INDEX IX_Users_PhoneDigitsRev ON dbo.Users (PhoneDigitsRev) WHERE PhoneDigitsRev IS NOT NULL;
 END
 GO
 

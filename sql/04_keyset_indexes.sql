@@ -12,7 +12,7 @@
      3) снимает зависимый keyset-индекс, если он есть (иначе ALTER COLUMN падает);
      4) делает колонку NOT NULL (после бэкфилла — иначе EF упадёт на NULL);
      5) (пере)создаёт keyset-индекс (RegistrantLastName, RegistrationId);
-     6) индекс IX_Users_Phone для поиска по телефону;
+     6) вычисляемая колонка PhoneDigitsRev + индекс для поиска по телефону (seek по последним цифрам);
      7) (опционально) full-text индексы для поиска по именам (Users, FamilyMembers).
 
    Порядок запуска: 01 (схема) -> 03 (bulk) -> 04 (этот файл).
@@ -59,12 +59,23 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes
         INCLUDE (EventId, UserId, GroupCode, Status);
 GO
 
-/* 6. Индекс для поиска по телефону (Phone LIKE '%x%' -> узкий index scan вместо
-      кластерного). Идемпотентно — для БД, созданных старой схемой без него. ------ */
+/* 6. Поиск по телефону «по последним цифрам» -> seek. Развёрнутые цифры (PERSISTED)
+      + префиксный индекс вместо подстрочного скана. Идемпотентно. ADD колонки —
+      size-of-data: на больших Users заполнение разовое, кратко блокирует таблицу. -------- */
+IF COL_LENGTH(N'dbo.Users', N'PhoneDigitsRev') IS NULL
+    ALTER TABLE dbo.Users ADD PhoneDigitsRev
+        AS REVERSE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(Phone,'+',''),' ',''),'-',''),'(',''),')','')) PERSISTED;
+GO
+
+-- Старый узкий индекс по Phone больше не нужен (заменён на PhoneDigitsRev).
+IF EXISTS (SELECT 1 FROM sys.indexes
+           WHERE name = N'IX_Users_Phone' AND object_id = OBJECT_ID(N'dbo.Users'))
+    DROP INDEX IX_Users_Phone ON dbo.Users;
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes
-               WHERE name = N'IX_Users_Phone'
-                 AND object_id = OBJECT_ID(N'dbo.Users'))
-    CREATE INDEX IX_Users_Phone ON dbo.Users (Phone) WHERE Phone IS NOT NULL;
+               WHERE name = N'IX_Users_PhoneDigitsRev' AND object_id = OBJECT_ID(N'dbo.Users'))
+    CREATE INDEX IX_Users_PhoneDigitsRev ON dbo.Users (PhoneDigitsRev) WHERE PhoneDigitsRev IS NOT NULL;
 GO
 
 /* =============================================================================
