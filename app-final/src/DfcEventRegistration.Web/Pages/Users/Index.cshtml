@@ -2,6 +2,7 @@
 @model DfcEventRegistration.Web.Pages.Users.IndexModel
 @{
     ViewData["Title"] = "Users";
+    var isAdmin = User.IsInRole(Auth.Roles.Admin);
 
     var baseRoute = new Dictionary<string, string>();
     if (!string.IsNullOrWhiteSpace(Model.Q)) baseRoute["Q"] = Model.Q!;
@@ -34,7 +35,10 @@
     <button type="submit">Apply</button>
     <a class="btn-secondary" asp-page="/Users/Index">Reset</a>
     <button type="button" id="userCountBtn" class="btn-secondary">Count ▷</button>
-    <a class="btn-primary" asp-page="/Users/Create">+ New user</a>
+    @if (isAdmin)
+    {
+        <a class="btn-primary" asp-page="/Users/Create">+ New user</a>
+    }
 </form>
 
 <p class="muted" id="userCountResult" aria-live="polite"></p>
@@ -67,7 +71,7 @@
                 <td>@(u.DateOfBirth?.ToString("yyyy-MM-dd"))</td>
                 <td class="num">@u.FamilyCount</td>
                 <td class="num">@u.RegistrationCount</td>
-                <td><a asp-page="/Users/Edit" asp-route-id="@u.UserId">Edit</a></td>
+                <td>@if (isAdmin) { <a asp-page="/Users/Edit" asp-route-id="@u.UserId">Edit</a> }</td>
             </tr>
         }
     </tbody>

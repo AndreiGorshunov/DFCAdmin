@@ -3,6 +3,7 @@
 @using DfcEventRegistration.Web.Models
 @{
     ViewData["Title"] = "Children";
+    var isAdmin = User.IsInRole(Auth.Roles.Admin);
 
     var baseRoute = new Dictionary<string, string>();
     if (!string.IsNullOrWhiteSpace(Model.Q)) baseRoute["Q"] = Model.Q!;
@@ -85,7 +86,7 @@
                 <td>@c.ParentFirstName @c.ParentLastName</td>
                 <td>@c.ParentEmail</td>
                 <td>@c.GroupCode</td>
-                <td><a asp-page="/Registrants/Edit" asp-route-id="@c.RegistrationId">Registration</a></td>
+                <td>@if (isAdmin) { <a asp-page="/Registrants/Edit" asp-route-id="@c.RegistrationId">Registration</a> }</td>
             </tr>
         }
     </tbody>

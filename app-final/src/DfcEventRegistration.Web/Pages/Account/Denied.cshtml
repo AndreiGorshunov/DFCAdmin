@@ -1,0 +1,12 @@
+@page
+@model DfcEventRegistration.Web.Pages.Account.DeniedModel
+@{
+    ViewData["Title"] = "Access denied";
+}
+
+<h1>Access denied</h1>
+<p class="muted">
+    Your account doesn't have permission to open this page.
+    Partner accounts can search data and generate reports, but cannot manage records.
+</p>
+<p><a class="btn-secondary" asp-page="/Registrants/Index">Back to registrants</a></p>

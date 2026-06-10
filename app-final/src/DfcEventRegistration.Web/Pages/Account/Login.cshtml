@@ -1,0 +1,54 @@
+@page
+@model DfcEventRegistration.Web.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Sign in";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in · DFC 2026 Admin</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/forms.css" asp-append-version="true" />
+</head>
+<body>
+    <main class="container" style="max-width:420px;margin:10vh auto;">
+        <h1>DFC 2026 · Admin</h1>
+
+        @if (Model.DevMode)
+        {
+            <div class="card">
+                <h2>Developer sign-in</h2>
+                <p class="muted small">No identity provider is wired yet. Pick a role to sign in for testing.</p>
+
+                <form method="post" asp-page="/Account/Login">
+                    <input type="hidden" asp-for="ReturnUrl" />
+                    <label>Email
+                        <input asp-for="Email" />
+                    </label>
+                    <label>Role
+                        <select asp-for="Role">
+                            @foreach (var r in LoginModel.AllRoles)
+                            {
+                                <option value="@r">@r</option>
+                            }
+                        </select>
+                    </label>
+                    <div class="actions">
+                        <button type="submit" class="btn-primary">Sign in (dev)</button>
+                    </div>
+                </form>
+            </div>
+        }
+        else
+        {
+            <div class="card">
+                <h2>Sign-in unavailable</h2>
+                <p class="muted">No identity provider is configured yet. Please contact the administrator.</p>
+            </div>
+        }
+    </main>
+</body>
+</html>
