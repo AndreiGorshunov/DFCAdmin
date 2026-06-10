@@ -57,6 +57,10 @@ BEGIN
     -- Email как естественный уникальный ключ пользователя.
     -- Убери, если допускаются дубли e-mail.
     CREATE UNIQUE INDEX UX_Users_Email ON dbo.Users (Email);
+
+    -- Поиск по телефону: узкий NC-индекс, чтобы Phone LIKE '%x%' сканировал
+    -- (Phone, UserId), а не кластерную таблицу. Фильтрованный — пропускаем NULL-телефоны.
+    CREATE INDEX IX_Users_Phone ON dbo.Users (Phone) WHERE Phone IS NOT NULL;
 END
 GO
 

@@ -31,40 +31,24 @@ public class ChildQueryService
         if (!string.IsNullOrWhiteSpace(f.Q))
         {
             var raw = f.Q.Trim();
-            var tokens = UserSearchService.Tokenize(raw);
 
-            // Родитель/контакт — через общий хелпер (имя FTS/LIKE по флагу + email/телефон).
+            // Родитель/контакт — по персоне (имя FTS/LIKE по флагу + email/телефон).
             // Берём ParticipantId детей таких родителей (FamilyMemberId != null отсекает самого родителя).
             var parentIds = _search.MatchUserIds(raw);
             var byParentPids = _db.RegistrationParticipants
                 .Where(p => p.FamilyMemberId != null && parentIds.Contains(p.Registration.UserId))
                 .Select(p => p.ParticipantId);
 
-            IQueryable<long> matchedPids = byParentPids;
+            // Имя ребёнка — по FamilyMembers (FTS/LIKE по флагу) -> FamilyMemberId, участники
+            // через индекс IX_RegistrationParticipants_FamilyMemberId. При FTS — index lookup, быстро и при 0.
+            var childFmIds = _search.MatchFamilyMemberIds(raw);
+            var byChildPids = _db.RegistrationParticipants
+                .Where(p => p.FamilyMemberId != null && childFmIds.Contains(p.FamilyMemberId.Value))
+                .Select(p => p.ParticipantId);
 
-            if (tokens.Count > 0)
-            {
-                // Имя РЕБЁНКА ищем в FamilyMembers (~0.5M), а НЕ по участникам (~2M):
-                // LIKE-скан меньшей таблицы -> FamilyMemberId, затем участники через индекс
-                // IX_RegistrationParticipants_FamilyMemberId. На детях full-text индекса нет.
-                var fm = _db.FamilyMembers.AsQueryable();
-                foreach (var tok in tokens)
-                {
-                    var t = tok;
-                    fm = fm.Where(m => m.FirstName.Contains(t) || m.LastName.Contains(t));
-                }
-                var childFmIds = fm.Select(m => m.FamilyMemberId);
-
-                var byChildPids = _db.RegistrationParticipants
-                    .Where(p => p.FamilyMemberId != null && childFmIds.Contains(p.FamilyMemberId.Value))
-                    .Select(p => p.ParticipantId);
-
-                // Грейн-уровневый union по ParticipantId: совпал РОДИТЕЛЬ или имя РЕБЁНКА.
-                // (Дети наследуют фамилию родителя, поэтому "Имя Фамилия" по ребёнку работает.)
-                matchedPids = byParentPids.Union(byChildPids);
-            }
-
-            // Один сарджабельный фильтр по ParticipantId (кластерный PK) — без скана участников при 0 совпадений.
+            // Грейн-уровневый union по ParticipantId (кластерный PK): совпал РОДИТЕЛЬ или имя РЕБЁНКА.
+            // (Дети наследуют фамилию родителя, поэтому "Имя Фамилия" по ребёнку работает.)
+            var matchedPids = byParentPids.Union(byChildPids);
             q = q.Where(p => matchedPids.Contains(p.ParticipantId));
         }
 

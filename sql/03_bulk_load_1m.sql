@@ -144,6 +144,7 @@ DECLARE @ChildN int = (SELECT COUNT(*) FROM #Child);
 CREATE TABLE #Idx (TableName sysname, IndexName sysname);
 INSERT INTO #Idx VALUES
  (N'Users',                     N'UX_Users_Email'),
+ (N'Users',                     N'IX_Users_Phone'),
  (N'EventRegistrations',        N'IX_EventRegistrations_EventId'),
  (N'EventRegistrations',        N'IX_EventRegistrations_UserId'),
  (N'EventRegistrations',        N'UX_EventRegistrations_QRCode'),

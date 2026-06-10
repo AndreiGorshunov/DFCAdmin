@@ -16,8 +16,9 @@ namespace DfcEventRegistration.Web.Services;
 ///   false -> токенизированный LIKE (подстрока, в т.ч. внутри слова; работает без FTS-фичи).
 /// Email/телефон всегда LIKE (в full-text индекс не входят).
 ///
-/// FTS есть только на Users — поэтому имена ДЕТЕЙ (FamilyMembers) ищутся LIKE в самом
-/// ChildQueryService; сюда заведён только матч по персоне (родителю/регистранту).
+/// FTS-индексы есть на Users (имена персон) и на FamilyMembers (имена детей):
+/// MatchUserIds — по персоне (родитель/регистрант, + email/телефон),
+/// MatchFamilyMemberIds — по имени ребёнка (без контактов). Оба уважают флаг.
 /// </summary>
 public sealed class UserSearchService
 {
@@ -40,41 +41,64 @@ public sealed class UserSearchService
     public IQueryable<int> MatchUserIds(string raw)
         => _useFullText ? FullTextIds(raw) : LikeIds(raw);
 
-    // FTS: имена -> CONTAINS (токены AND, префиксно, First|Last). Контакт (email/телефон) —
-    // несарджабельный LIKE-скан, поэтому включаем его ТОЛЬКО когда ввод похож на контакт
-    // (есть '@' или цифра). Иначе для именного запроса это лишний скан ~всех Users
-    // (имена и так покрыты full-text'ом, email у нас производный от имени), из-за которого
-    // «fatima archebe» (0 совпадений) сканит таблицу целиком, чтобы доказать пустоту.
-    private IQueryable<int> FullTextIds(string raw)
+    /// <summary>
+    /// FamilyMemberId детей, чьё имя/фамилия подходят под строку (по флагу: full-text CONTAINS
+    /// или LIKE). Контактов у детей нет — только имя. При UseFullText требует FTS-индекса
+    /// на FamilyMembers (04_keyset_indexes.sql). Пустые токены -> пустой набор.
+    /// </summary>
+    public IQueryable<int> MatchFamilyMemberIds(string raw)
     {
         var tokens = Tokenize(raw);
+        if (tokens.Count == 0)
+            return _db.FamilyMembers.Where(m => false).Select(m => m.FamilyMemberId);
 
-        IQueryable<int>? nameIds = null;
-        if (tokens.Count > 0)
+        var q = _db.FamilyMembers.AsQueryable();
+        if (_useFullText)
         {
-            var names = _db.Users.AsQueryable();
             foreach (var tok in tokens)
             {
-                var term = "\"" + tok + "*\"";   // префиксный full-text терм, параметризуется EF
-                names = names.Where(u => EF.Functions.Contains(u.FirstName, term)
-                                      || EF.Functions.Contains(u.LastName, term));
+                var term = "\"" + tok + "*\"";   // префиксный full-text терм
+                q = q.Where(m => EF.Functions.Contains(m.FirstName, term)
+                              || EF.Functions.Contains(m.LastName, term));
             }
-            nameIds = names.Select(u => u.UserId);
         }
-
-        var looksLikeContact = raw.Contains('@') || raw.Any(char.IsDigit);
-        IQueryable<int>? contactIds = looksLikeContact
-            ? _db.Users.Where(u => u.Email.Contains(raw) || (u.Phone != null && u.Phone.Contains(raw)))
-                       .Select(u => u.UserId)
-            : null;
-
-        return (nameIds, contactIds) switch
+        else
         {
-            (not null, not null) => nameIds.Union(contactIds),
-            (not null, null)     => nameIds,
-            (null, not null)     => contactIds,
-            _                    => _db.Users.Where(u => false).Select(u => u.UserId)   // мусорный ввод -> ничего
-        };
+            foreach (var tok in tokens)
+            {
+                var t = tok;
+                q = q.Where(m => m.FirstName.Contains(t) || m.LastName.Contains(t));
+            }
+        }
+        return q.Select(m => m.FamilyMemberId);
+    }
+
+    // Маршрутизация по форме ввода (чтобы не сканировать всё подряд и быть сарджабельным):
+    //   '@'            -> email: префикс по UX_Users_Email (index seek);
+    //   цифры без букв -> телефон: подстрока по узкому IX_Users_Phone (не кластерный скан);
+    //   иначе          -> имя: full-text CONTAINS (токены AND, префиксно, First|Last).
+    // Контактные и именной пути не смешиваем: запрос обычно одного намерения, а раздельность
+    // даёт сарджабельность и убирает лишние сканы ~всех Users.
+    private IQueryable<int> FullTextIds(string raw)
+    {
+        if (raw.Contains('@'))
+            return _db.Users.Where(u => u.Email.StartsWith(raw)).Select(u => u.UserId);
+
+        if (raw.Any(char.IsDigit) && !raw.Any(char.IsLetter))
+            return _db.Users.Where(u => u.Phone != null && u.Phone.Contains(raw)).Select(u => u.UserId);
+
+        var tokens = Tokenize(raw);
+        if (tokens.Count == 0)
+            return _db.Users.Where(u => false).Select(u => u.UserId);   // мусорный ввод -> ничего
+
+        var names = _db.Users.AsQueryable();
+        foreach (var tok in tokens)
+        {
+            var term = "\"" + tok + "*\"";   // префиксный full-text терм, параметризуется EF
+            names = names.Where(u => EF.Functions.Contains(u.FirstName, term)
+                                  || EF.Functions.Contains(u.LastName, term));
+        }
+        return names.Select(u => u.UserId);
     }
 
     // LIKE-fallback: токенизированный поиск по имени/фамилии/email/телефону (AND токены, OR поля).
