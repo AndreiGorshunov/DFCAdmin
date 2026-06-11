@@ -9,66 +9,47 @@ Excel/CSV. Доступ под аутентификацией с ролями **
 ## Быстрый старт (локально)
 
 ```bash
-# 1) База (SSMS, по порядку)
-#    Свежая БД:    sql/01_schema.sql  ->  03_bulk_load_1m.sql (или 02_seed_small.sql)  ->  04_keyset_indexes.sql
-#    Аутентификация (таблицы доступа + аудит + сид): sql/05_auth.sql
-#    На уже существующей БД достаточно прогнать только 05_auth.sql.
+# 1) База (SSMS): 01_schema -> 03_bulk_load_1m (или 02_seed_small) -> 04_keyset_indexes -> 05_auth
+#    На существующей БД — достаточно 05_auth.sql.
 
-# 2) Строка подключения (локально — в appsettings.Development.json, он в .gitignore).
-#    Файл с Windows-auth к localhost уже есть; при необходимости поправь Server/строку.
-#    Альтернатива: dotnet user-secrets set "ConnectionStrings:Default" "..."
+# 2) Строка подключения: appsettings.Development.json (в .gitignore, файл уже есть) или user-secrets.
 
-# 3) Приложение
+# 3) Запуск
 cd app-final/src/DfcEventRegistration.Web
 dotnet restore
-dotnet run                           # профиль http по умолчанию -> http://localhost:5095 (Development)
-# dotnet run --launch-profile https  # https://localhost:7095, если нужен TLS локально
+dotnet run                           # http://localhost:5095 (Development)
+# dotnet run --launch-profile https  # https://localhost:7095
 ```
 
 Без входа — редирект на `/Account/Login`. В Development это dev-заглушка: выбираешь
 засиженного пользователя (`admin@dfc.local` — Admin, `partner@dfc.local` — Partner),
 роль берётся из таблицы `AdminUsers`. Корень редиректит на `/Registrants`.
 
-> .NET: проект на `net8.0` (LTS). Если стоит .NET 10 — поменяй `TargetFramework`
-> в `.csproj` на `net10.0` и версии пакетов на `10.x`.
+> .NET: проект на `net10.0` (LTS) — нужен **.NET 10 SDK** на локальной машине и на VM
+> (`dotnet --list-sdks` для проверки). Откат на 8.0: `TargetFramework` → `net8.0` и версии
+> EF Core / RuntimeCompilation → `8.0.x`.
 
 ## Запуск на VM (Production)
 
-На деплой-VM приложение запускается тем же `dotnet run`, но через профиль `Production`
-(в `Properties/launchSettings.json`): окружение `Production`, Kestrel слушает локальный
-`http://localhost:5000`.
+Тот же `dotnet run`, но через профиль `production` (`Properties/launchSettings.json`):
+окружение `Production`, `applicationUrl` указывает на домен.
 
 ```bash
-# 0) Забрать ветку. На деплой-боксе зеркалим remote (без merge — иначе git просит identity):
-git fetch origin
-git reset --hard origin/feature/auth     # или ваша целевая ветка
+# Забрать ветку (на деплой-боксе зеркалим remote, без merge):
+git fetch origin && git reset --hard origin/feature/auth
 
-# 1) Один раз: строка подключения для прода — appsettings.Production.json (в .gitignore,
-#    живёт ТОЛЬКО на VM), путь app-final/src/DfcEventRegistration.Web/appsettings.Production.json:
-#    { "ConnectionStrings": { "Default": "Server=SQLHOST;Database=dfc.EventRegistration;User Id=app;Password=***;Encrypt=True;TrustServerCertificate=True;" } }
-#    Либо переменная окружения ConnectionStrings__Default.
+# Один раз: строка подключения — appsettings.Production.json (в .gitignore, только на VM)
+#   или env ConnectionStrings__Default. И прогнать SQL (01 -> 03/02 -> 04 -> 05).
 
-# 2) Один раз: прогнать SQL на SQL Server этой VM (01 -> 03/02 -> 04 -> 05).
-
-# 3) Запуск
 cd app-final/src/DfcEventRegistration.Web
-dotnet run -c Release --launch-profile Production
+dotnet run -c Release --launch-profile production
 ```
 
-- **Имя профиля регистрозависимо** — ровно `Production` (не `production`).
-- Окружение `Production` → в шапке появляется метка **PROD** и приглушённый янтарный фон
-  (чтобы не перепутать с локальным стендом); включаются HTTPS-редирект и HSTS.
-- **TLS и домен** обслуживает реверс-прокси (nginx/IIS) на VM: он терминирует TLS для
-  `https://dfc2026.brimit.com` и форвардит на Kestrel (`http://localhost:5000`). Прокси
-  обязан слать `X-Forwarded-Proto` (иначе HTTPS-редирект зациклится) и `Host`. `Program.cs`
-  уже восстанавливает схему/хост через `ForwardedHeaders` в Production. Если прокси на
-  другом хосте — добавь его IP в `KnownProxies` и поменяй `applicationUrl` профиля на
-  `http://0.0.0.0:5000`. Если прокси нет и Kestrel сам отдаёт домен — нужен TLS-сертификат
-  (секция `Kestrel:Certificates` в `appsettings.Production.json`).
-- `appsettings.Development.json` в Production НЕ читается — строку берёт
-  `appsettings.Production.json` (или env-переменная).
-- `dotnet run` как постоянный процесс не переживёт ребут/краш — позже завернуть в
-  systemd-юнит / Windows-сервис на `dotnet DfcEventRegistration.Web.dll`.
+- Имя профиля регистрозависимо — `production`.
+- Окружение `Production` → метка **PROD** и янтарный фон в шапке; HTTPS-редирект и HSTS включены.
+- TLS: Kestrel отдаёт домен сам (нужен сертификат) либо за реверс-прокси (тогда `applicationUrl`
+  → `http://localhost:5000`, прокси шлёт `X-Forwarded-Proto`; `ForwardedHeaders` в `Program.cs` уже включён).
+- `dotnet run` не переживёт ребут/краш — позже завернуть в сервис на `dotnet DfcEventRegistration.Web.dll`.
 
 ## Что реализовано
 
