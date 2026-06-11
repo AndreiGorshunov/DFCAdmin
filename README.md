@@ -1,6 +1,6 @@
 # DFC 2026 — Admin
 
-ASP.NET Core 8 (Razor Pages), MSSQL БД `[dfc.EventRegistration]`:
+ASP.NET Core 10 (Razor Pages), MSSQL БД `[dfc.EventRegistration]`:
 управление регистрациями (поиск/фильтр/сортировка/пейджинг, правка, удаление),
 пользователями, детьми, событиями и членами семьи; отчёт по футболкам и выгрузки в
 Excel/CSV. Доступ под аутентификацией с ролями **Admin** / **Partner**, журнал аудита
@@ -32,6 +32,8 @@ dotnet run                           # http://localhost:5095 (Development)
 ## Запуск на VM (Production)
 
 Тот же `dotnet run`, но через профиль `production` (`Properties/launchSettings.json`):
+окружение `Production`, Kestrel слушает `0.0.0.0:443` (сертификат из `Kestrel:Certificates:Default`).
+Доступно **только из корпоративной сети** по `https://dfc2026.brimit.com` — публичного DNS нет.
 
 ```bash
 # Забрать ветку (на деплой-боксе зеркалим remote, без merge):
@@ -46,8 +48,9 @@ dotnet run -c Release --launch-profile production
 
 - Имя профиля регистрозависимо — `production`.
 - Окружение `Production` → метка **PROD** и янтарный фон в шапке; HTTPS-редирект и HSTS включены.
-- TLS: Kestrel отдаёт домен сам (нужен сертификат) либо за реверс-прокси (тогда `applicationUrl`
-  → `http://localhost:5000`, прокси шлёт `X-Forwarded-Proto`; `ForwardedHeaders` в `Program.cs` уже включён).
+- Доступ из корпсети: открыть на VM входящий TCP **443**; имя `dfc2026.brimit.com` резолвится
+  на клиентах через внутренний DNS или их hosts (→ IP виртуалки). Сертификат — от внутреннего CA
+  (или импортирован в доверенные корневые на клиентах), иначе будет ворнинг.
 - `dotnet run` не переживёт ребут/краш — позже завернуть в сервис на `dotnet DfcEventRegistration.Web.dll`.
 
 ## Что реализовано
