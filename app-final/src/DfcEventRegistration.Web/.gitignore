@@ -82,6 +82,7 @@ ehthumbs.db
 #
 # Если всё же держишь секреты в файле окружения — игнорь его:
 appsettings.Development.json
+appsettings.Production.json
 appsettings.*.Local.json
 secrets.json
 *.env

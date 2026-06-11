@@ -4,6 +4,7 @@ using DfcEventRegistration.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.EntityFrameworkCore;
 
@@ -98,11 +99,24 @@ var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
+    // За реверс-прокси (nginx/IIS), который терминирует TLS для https://dfc2026.brimit.com и
+    // форвардит на Kestrel по http: восстанавливаем исходные scheme/host из X-Forwarded-*.
+    // Без этого приложение считает запрос http -> HTTPS-редирект зацикливается, а Secure-cookie
+    // и абсолютные URL неверны. По умолчанию доверяем только loopback-прокси (на той же VM);
+    // если прокси на другом хосте — добавь его IP в KnownProxies. Без прокси (Kestrel напрямую
+    // с сертификатом) заголовков нет -> это no-op.
+    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    });
+
     app.UseExceptionHandler("/Error");
     app.UseHsts();
+    // Форсируем HTTPS только вне Development. В деве приложение доступно и по http
+    // (иначе http://localhost:5095 редиректит на https://localhost:7095). cookie в деве — SameAsRequest.
+    app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 
