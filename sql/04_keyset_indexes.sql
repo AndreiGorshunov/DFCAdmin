@@ -73,9 +73,13 @@ IF EXISTS (SELECT 1 FROM sys.indexes
     DROP INDEX IX_Users_Phone ON dbo.Users;
 GO
 
+-- НЕфильтрованный намеренно: фильтр не может ссылаться на вычисляемую колонку (Msg 10609),
+-- а фильтр по базовой Phone не помог бы — EF генерит только предикат по PhoneDigitsRev
+-- (LIKE 'X%'), и оптимизатор не сопоставил бы его с фильтром. NULL/пустые строки в индексе
+-- для ~1M — ничтожные накладные, зато seek по последним цифрам работает гарантированно.
 IF NOT EXISTS (SELECT 1 FROM sys.indexes
                WHERE name = N'IX_Users_PhoneDigitsRev' AND object_id = OBJECT_ID(N'dbo.Users'))
-    CREATE INDEX IX_Users_PhoneDigitsRev ON dbo.Users (PhoneDigitsRev) WHERE PhoneDigitsRev IS NOT NULL;
+    CREATE INDEX IX_Users_PhoneDigitsRev ON dbo.Users (PhoneDigitsRev);
 GO
 
 /* =============================================================================

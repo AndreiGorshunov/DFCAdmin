@@ -32,6 +32,14 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
+   КОНТЕКСТ БД. Обязательно переключаемся на целевую базу: иначе все CREATE TABLE
+   ниже уйдут в базу по умолчанию для сессии (обычно master), и в
+   [dfc.EventRegistration] таблиц не будет. Отдельным батчом — после CREATE DATABASE.
+   -------------------------------------------------------------------------- */
+USE [dfc.EventRegistration];
+GO
+
+/* -----------------------------------------------------------------------------
    Схема (по желанию вынести в отдельную; здесь используем dbo)
    -------------------------------------------------------------------------- */
 -- IF SCHEMA_ID(N'evt') IS NULL EXEC(N'CREATE SCHEMA evt AUTHORIZATION dbo;');
@@ -63,7 +71,9 @@ BEGIN
     CREATE UNIQUE INDEX UX_Users_Email ON dbo.Users (Email);
 
     -- Поиск по телефону «по последним цифрам»: префикс по развёрнутым цифрам = seek.
-    CREATE INDEX IX_Users_PhoneDigitsRev ON dbo.Users (PhoneDigitsRev) WHERE PhoneDigitsRev IS NOT NULL;
+    -- НЕфильтрованный: фильтр не может ссылаться на вычисляемую колонку (Msg 10609),
+    -- а EF всё равно генерит предикат только по PhoneDigitsRev (фильтр по Phone не сопоставился бы).
+    CREATE INDEX IX_Users_PhoneDigitsRev ON dbo.Users (PhoneDigitsRev);
 END
 GO
 
