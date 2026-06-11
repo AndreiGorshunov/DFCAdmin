@@ -32,11 +32,10 @@ dotnet run                           # http://localhost:5095 (Development)
 ## Запуск на VM (Production)
 
 Тот же `dotnet run`, но через профиль `production` (`Properties/launchSettings.json`):
-окружение `Production`, `applicationUrl` указывает на домен.
 
 ```bash
 # Забрать ветку (на деплой-боксе зеркалим remote, без merge):
-git fetch origin && git reset --hard origin/feature/auth
+git fetch origin && git reset --hard origin/feature/auth-v10
 
 # Один раз: строка подключения — appsettings.Production.json (в .gitignore, только на VM)
 #   или env ConnectionStrings__Default. И прогнать SQL (01 -> 03/02 -> 04 -> 05).
