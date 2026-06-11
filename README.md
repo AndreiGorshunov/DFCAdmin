@@ -6,7 +6,7 @@ ASP.NET Core 8 (Razor Pages), MSSQL БД `[dfc.EventRegistration]`:
 Excel/CSV. Доступ под аутентификацией с ролями **Admin** / **Partner**, журнал аудита
 и управление доступом из UI.
 
-## Быстрый старт
+## Быстрый старт (локально)
 
 ```bash
 # 1) База (SSMS, по порядку)
@@ -14,20 +14,61 @@ Excel/CSV. Доступ под аутентификацией с ролями **
 #    Аутентификация (таблицы доступа + аудит + сид): sql/05_auth.sql
 #    На уже существующей БД достаточно прогнать только 05_auth.sql.
 
-# 2) Приложение
+# 2) Строка подключения (локально — в appsettings.Development.json, он в .gitignore).
+#    Файл с Windows-auth к localhost уже есть; при необходимости поправь Server/строку.
+#    Альтернатива: dotnet user-secrets set "ConnectionStrings:Default" "..."
+
+# 3) Приложение
 cd app-final/src/DfcEventRegistration.Web
-#    проверь ConnectionStrings:Default в appsettings.json
 dotnet restore
-dotnet run
+dotnet run                           # профиль http по умолчанию -> http://localhost:5095 (Development)
+# dotnet run --launch-profile https  # https://localhost:7095, если нужен TLS локально
 ```
 
-Открой адрес из консоли (например `https://localhost:7095`). Без входа — редирект на
-`/Account/Login`. В Development это dev-заглушка: выбираешь засиженного пользователя
-(`admin@dfc.local` — Admin, `partner@dfc.local` — Partner), роль берётся из таблицы
-`AdminUsers`. Корень редиректит на `/Registrants`.
+Без входа — редирект на `/Account/Login`. В Development это dev-заглушка: выбираешь
+засиженного пользователя (`admin@dfc.local` — Admin, `partner@dfc.local` — Partner),
+роль берётся из таблицы `AdminUsers`. Корень редиректит на `/Registrants`.
 
 > .NET: проект на `net8.0` (LTS). Если стоит .NET 10 — поменяй `TargetFramework`
 > в `.csproj` на `net10.0` и версии пакетов на `10.x`.
+
+## Запуск на VM (Production)
+
+На деплой-VM приложение запускается тем же `dotnet run`, но через профиль `Production`
+(в `Properties/launchSettings.json`): окружение `Production`, Kestrel слушает локальный
+`http://localhost:5000`.
+
+```bash
+# 0) Забрать ветку. На деплой-боксе зеркалим remote (без merge — иначе git просит identity):
+git fetch origin
+git reset --hard origin/feature/auth     # или ваша целевая ветка
+
+# 1) Один раз: строка подключения для прода — appsettings.Production.json (в .gitignore,
+#    живёт ТОЛЬКО на VM), путь app-final/src/DfcEventRegistration.Web/appsettings.Production.json:
+#    { "ConnectionStrings": { "Default": "Server=SQLHOST;Database=dfc.EventRegistration;User Id=app;Password=***;Encrypt=True;TrustServerCertificate=True;" } }
+#    Либо переменная окружения ConnectionStrings__Default.
+
+# 2) Один раз: прогнать SQL на SQL Server этой VM (01 -> 03/02 -> 04 -> 05).
+
+# 3) Запуск
+cd app-final/src/DfcEventRegistration.Web
+dotnet run -c Release --launch-profile Production
+```
+
+- **Имя профиля регистрозависимо** — ровно `Production` (не `production`).
+- Окружение `Production` → в шапке появляется метка **PROD** и приглушённый янтарный фон
+  (чтобы не перепутать с локальным стендом); включаются HTTPS-редирект и HSTS.
+- **TLS и домен** обслуживает реверс-прокси (nginx/IIS) на VM: он терминирует TLS для
+  `https://dfc2026.brimit.com` и форвардит на Kestrel (`http://localhost:5000`). Прокси
+  обязан слать `X-Forwarded-Proto` (иначе HTTPS-редирект зациклится) и `Host`. `Program.cs`
+  уже восстанавливает схему/хост через `ForwardedHeaders` в Production. Если прокси на
+  другом хосте — добавь его IP в `KnownProxies` и поменяй `applicationUrl` профиля на
+  `http://0.0.0.0:5000`. Если прокси нет и Kestrel сам отдаёт домен — нужен TLS-сертификат
+  (секция `Kestrel:Certificates` в `appsettings.Production.json`).
+- `appsettings.Development.json` в Production НЕ читается — строку берёт
+  `appsettings.Production.json` (или env-переменная).
+- `dotnet run` как постоянный процесс не переживёт ребут/краш — позже завернуть в
+  systemd-юнит / Windows-сервис на `dotnet DfcEventRegistration.Web.dll`.
 
 ## Что реализовано
 
@@ -173,8 +214,10 @@ dotnet run
 ## Структура
 
 ```
-Program.cs                      // hosting, DI, cookie-auth, политики, RBAC-конвенции
-appsettings.json                // ConnectionStrings, TshirtStock, Export, Search, Auth:Oidc
+Program.cs                      // hosting, DI, cookie-auth, политики, RBAC-конвенции, ForwardedHeaders (prod)
+appsettings.json                // база с плейсхолдерами (ConnectionStrings пустой), TshirtStock, Export, Search, Auth:Oidc
+appsettings.Development.json    // локальная строка подключения (в .gitignore)
+Properties/launchSettings.json  // профили: http/https (Development) + Production (для VM)
 Auth/
   AuthConstants.cs              // Roles (Admin/Partner) + Policies (CanView/CanManage)
   RoleResolver.cs               // IRoleResolver: email -> роль из AdminUsers (при входе)
