@@ -453,4 +453,226 @@ public class AdminWriteService
         _audit.Stage("AdminUser.Delete", "AdminUser", email);
         await _db.SaveChangesAsync(ct);
     }
+
+    // ============================ Event sessions (v2) ============================
+    // EventSessions — сессии события; EventStartPoints — точки старта сессии;
+    // RegistrationSessions — выбор сессии/точки регистрацией + чек-ин. Каскады вручную (FK NO ACTION).
+
+    public record SessionEdit(int? SessionId, Guid EventId, string Name, string? Description, int? MaxParticipants);
+
+    public async Task<(bool ok, string? error, int id)> UpsertSessionAsync(SessionEdit e, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(e.Name)) return (false, "Name is required.", 0);
+        if (e.MaxParticipants is < 0) return (false, "Max participants cannot be negative.", 0);
+
+        EventSession s;
+        bool isNew;
+        if (e.SessionId is int id && id != 0)
+        {
+            var existing = await _db.EventSessions.FirstOrDefaultAsync(x => x.SessionId == id, ct);
+            if (existing is null) return (false, "Session not found.", 0);
+            s = existing;
+            isNew = false;
+        }
+        else
+        {
+            if (!await _db.Events.AnyAsync(x => x.Id == e.EventId, ct))
+                return (false, "Event not found.", 0);
+            s = new EventSession { EventId = e.EventId };
+            _db.EventSessions.Add(s);
+            isNew = true;
+        }
+
+        // Инвариант (вариант 2): MaxParticipants сессии не больше суммы Capacity её точек старта.
+        // При создании точек ещё нет -> проверять нечего; при правке — сверяем с текущими точками.
+        if (!isNew && await ValidateSessionCapacityAsync(s.SessionId, e.MaxParticipants, ct) is string capErr)
+            return (false, capErr, 0);
+
+        s.Name = e.Name.Trim();
+        s.Description = string.IsNullOrWhiteSpace(e.Description) ? null : e.Description;
+        s.MaxParticipants = e.MaxParticipants;
+
+        await _db.SaveChangesAsync(ct);
+        _audit.Stage(isNew ? "Session.Create" : "Session.Update", "EventSession", s.SessionId.ToString(), $"name={s.Name}");
+        await _db.SaveChangesAsync(ct);
+        return (true, null, s.SessionId);
+    }
+
+    public async Task<(int startPoints, int registrations)> SessionImpactAsync(int sessionId, CancellationToken ct = default)
+    {
+        int sp = await _db.EventStartPoints.CountAsync(x => x.SessionId == sessionId, ct);
+        int rs = await _db.RegistrationSessions.CountAsync(x => x.SessionId == sessionId, ct);
+        return (sp, rs);
+    }
+
+    /// <summary>Инвариант (вариант 2): MaxParticipants сессии не больше суммы Capacity её
+    /// точек старта — нельзя усадить больше, чем пускают точки. Проверяем, когда есть что
+    /// сравнивать: Max задан, точки есть и у ВСЕХ задана Capacity (null = безлимит -> не ограничиваем).
+    /// Возвращает текст ошибки или null.</summary>
+    private async Task<string?> ValidateSessionCapacityAsync(int sessionId, int? maxParticipants, CancellationToken ct)
+    {
+        if (maxParticipants is null) return null;
+        var caps = await _db.EventStartPoints.Where(p => p.SessionId == sessionId)
+            .Select(p => p.Capacity).ToListAsync(ct);
+        if (caps.Count == 0 || caps.Any(c => c is null)) return null;
+        int sum = caps.Sum(c => c!.Value);
+        return maxParticipants.Value > sum
+            ? $"Session limit ({maxParticipants}) exceeds the sum of its start point capacities ({sum}). " +
+              "Increase start point capacities or lower the session limit."
+            : null;
+    }
+
+    /// <summary>Каскад: выборы регистраций по сессии -> точки старта сессии -> сама сессия.</summary>
+    public async Task DeleteSessionCascadeAsync(int sessionId, CancellationToken ct = default)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        await _db.RegistrationSessions.Where(x => x.SessionId == sessionId).ExecuteDeleteAsync(ct);
+        await _db.EventStartPoints.Where(x => x.SessionId == sessionId).ExecuteDeleteAsync(ct);
+        await _db.EventSessions.Where(x => x.SessionId == sessionId).ExecuteDeleteAsync(ct);
+
+        _audit.Stage("Session.DeleteCascade", "EventSession", sessionId.ToString());
+        await _db.SaveChangesAsync(ct);
+
+        await tx.CommitAsync(ct);
+    }
+
+    public async Task<Guid> EventIdOfSessionAsync(int sessionId, CancellationToken ct = default)
+        => await _db.EventSessions.Where(x => x.SessionId == sessionId).Select(x => x.EventId).FirstOrDefaultAsync(ct);
+
+    // --- Start points ---
+
+    public record StartPointEdit(int? StartPointId, int SessionId, string Name,
+        TimeOnly? StartTime, TimeOnly? EndTime, int? Capacity, int DisplayOrder);
+
+    public async Task<(bool ok, string? error, int id)> UpsertStartPointAsync(StartPointEdit e, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(e.Name)) return (false, "Name is required.", 0);
+        if (e.Capacity is < 0) return (false, "Capacity cannot be negative.", 0);
+        if (e.StartTime is TimeOnly st && e.EndTime is TimeOnly en && en < st)
+            return (false, "End time must be on or after the start time.", 0);
+
+        EventStartPoint p;
+        bool isNew;
+        if (e.StartPointId is int id && id != 0)
+        {
+            var existing = await _db.EventStartPoints.FirstOrDefaultAsync(x => x.StartPointId == id, ct);
+            if (existing is null) return (false, "Start point not found.", 0);
+            p = existing;
+            isNew = false;
+        }
+        else
+        {
+            if (!await _db.EventSessions.AnyAsync(x => x.SessionId == e.SessionId, ct))
+                return (false, "Session not found.", 0);
+            p = new EventStartPoint { SessionId = e.SessionId };
+            _db.EventStartPoints.Add(p);
+            isNew = true;
+        }
+
+        p.Name = e.Name.Trim();
+        p.StartTime = e.StartTime;
+        p.EndTime = e.EndTime;
+        p.Capacity = e.Capacity;
+        p.DisplayOrder = e.DisplayOrder;
+
+        await _db.SaveChangesAsync(ct);
+        _audit.Stage(isNew ? "StartPoint.Create" : "StartPoint.Update", "EventStartPoint", p.StartPointId.ToString(), $"name={p.Name}");
+        await _db.SaveChangesAsync(ct);
+        return (true, null, p.StartPointId);
+    }
+
+    /// <summary>Каскад: выборы регистраций по точке -> сама точка старта.</summary>
+    public async Task DeleteStartPointCascadeAsync(int startPointId, CancellationToken ct = default)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        await _db.RegistrationSessions.Where(x => x.StartPointId == startPointId).ExecuteDeleteAsync(ct);
+        await _db.EventStartPoints.Where(x => x.StartPointId == startPointId).ExecuteDeleteAsync(ct);
+
+        _audit.Stage("StartPoint.DeleteCascade", "EventStartPoint", startPointId.ToString());
+        await _db.SaveChangesAsync(ct);
+
+        await tx.CommitAsync(ct);
+    }
+
+    public async Task<int> SessionIdOfStartPointAsync(int startPointId, CancellationToken ct = default)
+        => await _db.EventStartPoints.Where(x => x.StartPointId == startPointId).Select(x => x.SessionId).FirstOrDefaultAsync(ct);
+
+    /// <summary>Сколько выборов регистраций ссылается на точку (для предпросмотра каскада).</summary>
+    public async Task<int> StartPointRegistrationCountAsync(int startPointId, CancellationToken ct = default)
+        => await _db.RegistrationSessions.CountAsync(x => x.StartPointId == startPointId, ct);
+
+    // --- Registration sessions (выбор + чек-ин) ---
+
+    /// <summary>Добавить выбор сессии+точки для регистрации. Одну сессию можно
+    /// выбирать несколько раз — всегда создаётся новая строка (см. ReassignSessionAsync для смены точки).</summary>
+    public async Task<(bool ok, string? error)> AssignSessionAsync(
+        long registrationId, int sessionId, int startPointId, CancellationToken ct = default)
+    {
+        var regEventId = await _db.EventRegistrations.Where(r => r.RegistrationId == registrationId)
+            .Select(r => (Guid?)r.EventId).FirstOrDefaultAsync(ct);
+        if (regEventId is null) return (false, "Registration not found.");
+
+        var sessionEventId = await _db.EventSessions.Where(s => s.SessionId == sessionId)
+            .Select(s => (Guid?)s.EventId).FirstOrDefaultAsync(ct);
+        if (sessionEventId is null) return (false, "Session not found.");
+        if (sessionEventId.Value != regEventId.Value)
+            return (false, "Session belongs to a different event than the registration.");
+
+        bool spOk = await _db.EventStartPoints.AnyAsync(x => x.StartPointId == startPointId && x.SessionId == sessionId, ct);
+        if (!spOk) return (false, "Start point does not belong to this session.");
+
+        // Одну сессию можно выбирать несколько раз -> всегда добавляем новую строку.
+        // Сменить точку у конкретного выбора -> ReassignSessionAsync(registrationSessionId, ...).
+        _db.RegistrationSessions.Add(new RegistrationSession
+        {
+            RegistrationId = registrationId,
+            SessionId = sessionId,
+            StartPointId = startPointId,
+            CheckedIn = false
+        });
+        _audit.Stage("RegistrationSession.Assign", "Registration", registrationId.ToString(), $"sessionId={sessionId},startPointId={startPointId}");
+
+        await _db.SaveChangesAsync(ct);
+        return (true, null);
+    }
+
+    /// <summary>Сменить точку старта у конкретного выбора (строки RegistrationSessions).</summary>
+    public async Task<(bool ok, string? error)> ReassignSessionAsync(
+        long registrationSessionId, int startPointId, CancellationToken ct = default)
+    {
+        var rs = await _db.RegistrationSessions.FirstOrDefaultAsync(x => x.RegistrationSessionId == registrationSessionId, ct);
+        if (rs is null) return (false, "Selection not found.");
+
+        bool spOk = await _db.EventStartPoints.AnyAsync(x => x.StartPointId == startPointId && x.SessionId == rs.SessionId, ct);
+        if (!spOk) return (false, "Start point does not belong to this session.");
+
+        rs.StartPointId = startPointId;
+        _audit.Stage("RegistrationSession.Reassign", "RegistrationSession", registrationSessionId.ToString(), $"startPointId={startPointId}");
+        await _db.SaveChangesAsync(ct);
+        return (true, null);
+    }
+
+    public async Task RemoveRegistrationSessionAsync(long registrationSessionId, CancellationToken ct = default)
+    {
+        await _db.RegistrationSessions.Where(x => x.RegistrationSessionId == registrationSessionId).ExecuteDeleteAsync(ct);
+        _audit.Stage("RegistrationSession.Remove", "RegistrationSession", registrationSessionId.ToString());
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Отметить/снять чек-ин на сессию. CheckInTime ставится в UtcNow при отметке.</summary>
+    public async Task SetSessionCheckedInAsync(long registrationSessionId, bool checkedIn, CancellationToken ct = default)
+    {
+        var rs = await _db.RegistrationSessions.FirstOrDefaultAsync(x => x.RegistrationSessionId == registrationSessionId, ct);
+        if (rs is null) return;
+        rs.CheckedIn = checkedIn;
+        rs.CheckInTime = checkedIn ? DateTime.UtcNow : null;
+        _audit.Stage(checkedIn ? "RegistrationSession.CheckIn" : "RegistrationSession.UndoCheckIn", "RegistrationSession", registrationSessionId.ToString());
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<long> RegistrationIdOfSessionRowAsync(long registrationSessionId, CancellationToken ct = default)
+        => await _db.RegistrationSessions.Where(x => x.RegistrationSessionId == registrationSessionId)
+                   .Select(x => x.RegistrationId).FirstOrDefaultAsync(ct);
 }

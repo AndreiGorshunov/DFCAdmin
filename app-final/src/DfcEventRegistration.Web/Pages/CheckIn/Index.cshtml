@@ -1,0 +1,74 @@
+@page
+@model DfcEventRegistration.Web.Pages.CheckIn.IndexModel
+@{
+    ViewData["Title"] = "Check-in";
+}
+
+<h1>Check-in</h1>
+<p class="muted small">Scan a registration QR code (or type the registration number), then check in each session.</p>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="flash ok">@Model.Notice</div>
+}
+
+<form method="get" class="card">
+    <label>QR code / registration #
+        <input name="q" value="@Model.Q" autofocus autocomplete="off" placeholder="Scan or type…" />
+    </label>
+    <div class="actions">
+        <button type="submit" class="btn-primary">Find</button>
+    </div>
+</form>
+
+@if (Model.Searched && !Model.Found)
+{
+    <div class="flash err">No registration found for “@Model.Q”.</div>
+}
+
+@if (Model.Found)
+{
+    <div class="card">
+        <h2>@Model.RegistrantName</h2>
+        <p class="muted small">
+            Event: <strong>@Model.EventName</strong> · Registration #@Model.RegistrationId
+            @if (!string.IsNullOrEmpty(Model.QrCode)) { <text> · QR: <code>@Model.QrCode</code></text> }
+        </p>
+
+        <table class="grid">
+            <thead><tr><th>Session</th><th>Start point</th><th>Time</th><th>Checked in</th><th></th></tr></thead>
+            <tbody>
+                @if (Model.Sessions.Count == 0)
+                {
+                    <tr><td colspan="5" class="muted center">No session selections for this registration.</td></tr>
+                }
+                @foreach (var s in Model.Sessions)
+                {
+                    <tr>
+                        <td><strong>@s.SessionName</strong></td>
+                        <td>@s.StartPointName</td>
+                        <td>@(s.StartTime?.ToString("HH\\:mm") ?? "—")@(s.EndTime is null ? "" : "–" + s.EndTime.Value.ToString("HH\\:mm"))</td>
+                        <td>
+                            @if (s.CheckedIn)
+                            {
+                                <span>Yes@(s.CheckInTime is null ? "" : " · " + s.CheckInTime.Value.ToString("yyyy-MM-dd HH:mm"))</span>
+                            }
+                            else
+                            {
+                                <span class="muted">No</span>
+                            }
+                        </td>
+                        <td>
+                            <form method="post" asp-page-handler="SetCheckedIn" class="inline-form">
+                                <input type="hidden" name="registrationSessionId" value="@s.RegistrationSessionId" />
+                                <input type="hidden" name="checkedIn" value="@((!s.CheckedIn).ToString().ToLowerInvariant())" />
+                                <input type="hidden" name="q" value="@Model.Q" />
+                                <button type="submit" class="@(s.CheckedIn ? "btn-link" : "btn-primary")">@(s.CheckedIn ? "Undo" : "Check in")</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

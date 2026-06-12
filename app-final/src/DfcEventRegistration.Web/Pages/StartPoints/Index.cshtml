@@ -1,0 +1,57 @@
+@page
+@model DfcEventRegistration.Web.Pages.StartPoints.IndexModel
+@{
+    ViewData["Title"] = "Start points";
+}
+
+<p class="muted"><a asp-page="/Sessions/Index" asp-route-eventId="@Model.EventId">‹ Back to sessions</a></p>
+<h1>Start points — @Model.SessionName</h1>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="flash ok">@Model.Notice</div>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+
+<p><a class="btn-primary" asp-page="/StartPoints/Edit" asp-route-sessionId="@Model.SessionId">+ New start point</a></p>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th class="num">Order</th><th>Name</th><th>Start</th><th>End</th>
+            <th class="num">Capacity</th><th class="num">Registrations</th><th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Model.StartPoints.Count == 0)
+        {
+            <tr><td colspan="7" class="muted center">No start points yet.</td></tr>
+        }
+        @foreach (var p in Model.StartPoints)
+        {
+            <tr>
+                <td class="num">@p.DisplayOrder</td>
+                <td><strong>@p.Name</strong></td>
+                <td>@(p.StartTime?.ToString("HH\\:mm") ?? "—")</td>
+                <td>@(p.EndTime?.ToString("HH\\:mm") ?? "—")</td>
+                <td class="num">@(p.Capacity?.ToString("N0") ?? "—")</td>
+                <td class="num">@p.Registrations.ToString("N0")</td>
+                <td class="row-actions">
+                    <a asp-page="/StartPoints/Edit" asp-route-id="@p.StartPointId" asp-route-sessionId="@Model.SessionId">Edit</a>
+                    <form method="post" asp-page-handler="Delete" class="inline-delete"
+                          onsubmit="return confirm('Delete this start point@(p.Registrations > 0 ? " and its " + p.Registrations.ToString("N0") + " selection(s)" : "")?');">
+                        <input type="hidden" name="startPointId" value="@p.StartPointId" />
+                        @if (p.Registrations > 0)
+                        {
+                            <label class="cascade"><input type="checkbox" name="force" value="true" /> cascade</label>
+                        }
+                        <button type="submit" class="link-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

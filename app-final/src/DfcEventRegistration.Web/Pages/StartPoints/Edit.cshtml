@@ -1,0 +1,36 @@
+@page
+@model DfcEventRegistration.Web.Pages.StartPoints.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "New start point" : "Edit start point";
+}
+
+<p class="muted"><a asp-page="/StartPoints/Index" asp-route-sessionId="@Model.SessionId">‹ Back to start points</a></p>
+<h1>@(Model.IsNew ? "New start point" : "Edit start point") — @Model.SessionName</h1>
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+<div asp-validation-summary="All"></div>
+
+<form method="post" asp-page-handler="Save" asp-route-id="@Model.Id" asp-route-sessionId="@Model.SessionId" class="card">
+    <input type="hidden" asp-for="Input.Id" />
+
+    <label>Name<input asp-for="Input.Name" /></label>
+
+    <div class="grid2">
+        <label>Start time
+            <input type="time" name="Input.StartTime" value="@(Model.Input.StartTime?.ToString("HH\\:mm"))" />
+        </label>
+        <label>End time
+            <input type="time" name="Input.EndTime" value="@(Model.Input.EndTime?.ToString("HH\\:mm"))" />
+        </label>
+        <label>Capacity<input type="number" min="0" asp-for="Input.Capacity" /></label>
+        <label>Display order<input type="number" min="0" asp-for="Input.DisplayOrder" /></label>
+    </div>
+
+    <div class="actions">
+        <button type="submit" class="btn-primary">@(Model.IsNew ? "Create start point" : "Save changes")</button>
+        <a class="btn-secondary" asp-page="/StartPoints/Index" asp-route-sessionId="@Model.SessionId">Cancel</a>
+    </div>
+</form>

@@ -1,0 +1,29 @@
+@page
+@model DfcEventRegistration.Web.Pages.Sessions.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "New session" : "Edit session";
+}
+
+<p class="muted"><a asp-page="/Sessions/Index" asp-route-eventId="@Model.EventId">‹ Back to sessions</a></p>
+<h1>@(Model.IsNew ? "New session" : "Edit session") — @Model.EventName</h1>
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+<div asp-validation-summary="All"></div>
+
+<form method="post" asp-page-handler="Save" asp-route-id="@Model.Id" asp-route-eventId="@Model.EventId" class="card">
+    <input type="hidden" asp-for="Input.Id" />
+
+    <label>Name<input asp-for="Input.Name" /></label>
+
+    <label>Description<textarea asp-for="Input.Description" rows="3"></textarea></label>
+
+    <label>Max participants<input type="number" min="0" asp-for="Input.MaxParticipants" /></label>
+
+    <div class="actions">
+        <button type="submit" class="btn-primary">@(Model.IsNew ? "Create session" : "Save changes")</button>
+        <a class="btn-secondary" asp-page="/Sessions/Index" asp-route-eventId="@Model.EventId">Cancel</a>
+    </div>
+</form>

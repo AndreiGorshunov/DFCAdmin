@@ -1,0 +1,57 @@
+@page
+@model DfcEventRegistration.Web.Pages.Sessions.IndexModel
+@{
+    ViewData["Title"] = "Sessions";
+}
+
+<p class="muted"><a asp-page="/Events/Index">‹ Back to events</a></p>
+<h1>Sessions — @Model.EventName</h1>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="flash ok">@Model.Notice</div>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="flash err">@Model.Error</div>
+}
+
+<p><a class="btn-primary" asp-page="/Sessions/Edit" asp-route-eventId="@Model.EventId">+ New session</a></p>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Name</th><th>Description</th>
+            <th class="num">Max</th><th class="num">Start points</th><th class="num">Registrations</th><th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Model.Sessions.Count == 0)
+        {
+            <tr><td colspan="6" class="muted center">No sessions yet.</td></tr>
+        }
+        @foreach (var s in Model.Sessions)
+        {
+            <tr>
+                <td><strong>@s.Name</strong></td>
+                <td class="muted">@(string.IsNullOrWhiteSpace(s.Description) ? "—" : s.Description)</td>
+                <td class="num">@(s.MaxParticipants?.ToString("N0") ?? "—")</td>
+                <td class="num">@s.StartPoints.ToString("N0")</td>
+                <td class="num">@s.Registrations.ToString("N0")</td>
+                <td class="row-actions">
+                    <a asp-page="/StartPoints/Index" asp-route-sessionId="@s.SessionId">Start points</a>
+                    <a asp-page="/Sessions/Edit" asp-route-id="@s.SessionId" asp-route-eventId="@Model.EventId">Edit</a>
+                    <form method="post" asp-page-handler="Delete" class="inline-delete"
+                          onsubmit="return confirm('Delete this session@((s.StartPoints + s.Registrations) > 0 ? " and its " + s.StartPoints.ToString("N0") + " start point(s) / " + s.Registrations.ToString("N0") + " selection(s)" : "")?');">
+                        <input type="hidden" name="sessionId" value="@s.SessionId" />
+                        @if ((s.StartPoints + s.Registrations) > 0)
+                        {
+                            <label class="cascade"><input type="checkbox" name="force" value="true" /> cascade</label>
+                        }
+                        <button type="submit" class="link-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

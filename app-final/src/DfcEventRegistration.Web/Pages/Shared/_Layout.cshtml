@@ -37,15 +37,31 @@
         @if (User.Identity?.IsAuthenticated == true)
         {
             var isAdmin = User.IsInRole(Auth.Roles.Admin);
+            var isSteward = User.IsInRole(Auth.Roles.Steward);
+            var isPartner = User.IsInRole(Auth.Roles.Partner);
+            var canCheckIn = isAdmin || isSteward;
+            var roleName = isAdmin ? Auth.Roles.Admin
+                         : isSteward ? Auth.Roles.Steward
+                         : isPartner ? Auth.Roles.Partner : "—";
             <nav>
                 <a asp-page="/Registrants/Index">Registrants</a>
-                <a asp-page="/Users/Index">Users</a>
-                <a asp-page="/Children/Index">Children</a>
+                @if (!isSteward)
+                {
+                    <a asp-page="/Users/Index">Users</a>
+                    <a asp-page="/Children/Index">Children</a>
+                }
                 @if (isAdmin)
                 {
                     <a asp-page="/Events/Index">Events</a>
                 }
-                <a asp-page="/Reports/Tshirts">T-shirt report</a>
+                @if (canCheckIn)
+                {
+                    <a asp-page="/CheckIn/Index">Check-in</a>
+                }
+                @if (!isSteward)
+                {
+                    <a asp-page="/Reports/Tshirts">T-shirt report</a>
+                }
                 @if (isAdmin)
                 {
                     <a asp-page="/Admins/Index">Admins</a>
@@ -54,7 +70,7 @@
             </nav>
             <span class="userbox">
                 <span class="who">@User.Identity!.Name</span>
-                <span class="role">(@(isAdmin ? Auth.Roles.Admin : Auth.Roles.Partner))</span>
+                <span class="role">(@roleName)</span>
                 <form method="post" asp-page="/Account/Logout">
                     <button type="submit" class="btn-link">Sign out</button>
                 </form>

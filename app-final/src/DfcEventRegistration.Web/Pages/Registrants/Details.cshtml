@@ -18,7 +18,16 @@
 
 <p class="muted"><a asp-page="/Registrants/Index">‹ Back to registrants</a></p>
 <h1>Registrant details</h1>
-<p class="muted">Event: <strong>@Model.EventName</strong> · Registration #@Model.Id</p>
+<p class="muted">Event:
+    @if (isAdmin)
+    {
+        <a asp-page="/Events/Edit" asp-route-id="@Model.EventId"><strong>@Model.EventName</strong></a>
+    }
+    else
+    {
+        <strong>@Model.EventName</strong>
+    }
+    · Registration #@Model.Id</p>
 
 @if (isAdmin)
 {
@@ -54,6 +63,33 @@
             <tr><th>Emergency contact</th><td>@EmergencyContact()</td></tr>
         </tbody>
     </table>
+</div>
+
+<!-- ============ Sessions & check-in ============ -->
+<div class="card">
+    <h2>Sessions &amp; check-in</h2>
+    <p class="muted small">Sessions and start points this registration is assigned to, with check-in status.</p>
+    @if (Model.SessionChoices.Count == 0)
+    {
+        <p class="muted">No session selections.</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>Session</th><th>Start point</th><th>Time</th><th>Checked in</th></tr></thead>
+            <tbody>
+                @foreach (var s in Model.SessionChoices)
+                {
+                    <tr>
+                        <td><strong>@s.SessionName</strong></td>
+                        <td>@s.StartPointName</td>
+                        <td>@(s.StartTime?.ToString("HH\\:mm") ?? "—")@(s.EndTime is null ? "" : "–" + s.EndTime.Value.ToString("HH\\:mm"))</td>
+                        <td>@(s.CheckedIn ? ("Yes" + (s.CheckInTime is null ? "" : " · " + s.CheckInTime.Value.ToString("yyyy-MM-dd HH:mm"))) : "No")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 </div>
 
 <!-- ============ Participants of THIS registration ============ -->

@@ -80,6 +80,50 @@ public class RegistrationParticipant
     public FamilyMember? FamilyMember { get; set; }
 }
 
+/// <summary>Сессия внутри события (например «5K Run», «Yoga»). Events (1) -> (many) EventSessions.</summary>
+public class EventSession
+{
+    public int SessionId { get; set; }
+    public Guid EventId { get; set; }
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public int? MaxParticipants { get; set; }
+
+    public Event Event { get; set; } = null!;
+    public ICollection<EventStartPoint> StartPoints { get; set; } = new List<EventStartPoint>();
+}
+
+/// <summary>Точка/слот старта внутри сессии. EventSessions (1) -> (many) EventStartPoints.
+/// StartTime/EndTime — время суток (TimeOnly -> SQL TIME). DisplayOrder — порядок в UI.</summary>
+public class EventStartPoint
+{
+    public int StartPointId { get; set; }
+    public int SessionId { get; set; }
+    public string Name { get; set; } = "";
+    public TimeOnly? StartTime { get; set; }
+    public TimeOnly? EndTime { get; set; }
+    public int? Capacity { get; set; }
+    public int DisplayOrder { get; set; }
+
+    public EventSession Session { get; set; } = null!;
+}
+
+/// <summary>Выбор сессии и точки старта для конкретной регистрации + факт чек-ина.
+/// EventRegistrations (1) -> (many) RegistrationSessions.</summary>
+public class RegistrationSession
+{
+    public long RegistrationSessionId { get; set; }
+    public long RegistrationId { get; set; }
+    public int SessionId { get; set; }
+    public int StartPointId { get; set; }
+    public bool CheckedIn { get; set; }
+    public DateTime? CheckInTime { get; set; }
+
+    public EventRegistration Registration { get; set; } = null!;
+    public EventSession Session { get; set; } = null!;
+    public EventStartPoint StartPoint { get; set; } = null!;
+}
+
 /// <summary>
 /// Кто имеет доступ в админку и с какой ролью. Источник истины для ролей
 /// (IdP аутентифицирует личность, роль приложения назначается здесь).

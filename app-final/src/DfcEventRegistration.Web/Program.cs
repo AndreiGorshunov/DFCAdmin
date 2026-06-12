@@ -25,6 +25,9 @@ var razorPages = builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizePage("/Users/Edit", Policies.CanManage);
     options.Conventions.AuthorizeFolder("/Events", Policies.CanManage);
     options.Conventions.AuthorizePage("/FamilyMembers/Edit", Policies.CanManage);
+    options.Conventions.AuthorizeFolder("/Sessions", Policies.CanManage);
+    options.Conventions.AuthorizeFolder("/StartPoints", Policies.CanManage);
+    options.Conventions.AuthorizeFolder("/CheckIn", Policies.CanCheckIn);
     options.Conventions.AuthorizeFolder("/Admins", Policies.CanManage);
     options.Conventions.AuthorizeFolder("/Audit", Policies.CanManage);
 
@@ -71,8 +74,9 @@ builder.Services.AddScoped<AuditService>();
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(Policies.CanView, p => p.RequireRole(Roles.Admin, Roles.Partner));
+    options.AddPolicy(Policies.CanView, p => p.RequireRole(Roles.Admin, Roles.Partner, Roles.Steward));
     options.AddPolicy(Policies.CanManage, p => p.RequireRole(Roles.Admin));
+    options.AddPolicy(Policies.CanCheckIn, p => p.RequireRole(Roles.Admin, Roles.Steward));
 
     // Любой не покрытый конвенцией эндпоинт всё равно требует входа.
     options.FallbackPolicy = new AuthorizationPolicyBuilder()

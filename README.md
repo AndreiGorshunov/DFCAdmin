@@ -3,8 +3,9 @@
 ASP.NET Core 10 (Razor Pages), MSSQL БД `[dfc.EventRegistration]`:
 управление регистрациями (поиск/фильтр/сортировка/пейджинг, правка, удаление),
 пользователями, детьми, событиями и членами семьи; отчёт по футболкам и выгрузки в
-Excel/CSV. Доступ под аутентификацией с ролями **Admin** / **Partner**, журнал аудита
-и управление доступом из UI.
+Excel/CSV. Сессии и точки старта событий с индивидуальным чек-ином. Доступ под
+аутентификацией с ролями **Admin** / **Partner** / **Steward**, журнал аудита и управление
+доступом из UI.
 
 ## Быстрый старт (локально)
 
@@ -37,7 +38,7 @@ dotnet run                           # http://localhost:5095 (Development)
 
 ```bash
 # Забрать ветку (на деплой-боксе зеркалим remote, без merge):
-git fetch origin && git reset --hard origin/feature/auth-v10
+git fetch origin && git reset --hard origin/feature/dfc-v2
 
 # Один раз: строка подключения — appsettings.Production.json (в .gitignore, только на VM)
 #   или env ConnectionStrings__Default. И прогнать SQL (01 -> 03/02 -> 04 -> 05).
@@ -71,6 +72,12 @@ dotnet run -c Release --launch-profile production
 - Events (`/Events`): список + создание/правка/каскадное удаление (Admin).
 - FamilyMembers (`/FamilyMembers/Edit`): правка члена семьи (Admin).
 
+**Sessions / Start points / Check-in** (v2)
+- Events → Sessions (`/Sessions`): сессии события (5K Run, Yoga…), CRUD (Admin), каскадное удаление с предпросмотром.
+- Sessions → Start points (`/StartPoints`): точки/слоты старта со временем и ёмкостью, сортировка по `DisplayOrder` (Admin).
+- Регистрант ↔ сессии: на `/Registrants/Edit` — назначение точек (одну сессию можно выбрать несколько раз) и чек-ин; read-only на `/Registrants/Details`.
+- Чек-ин на площадке (`/CheckIn`): стьюард сканирует QR / вводит номер регистрации и отмечает чек-ин по сессиям (политика `CanCheckIn`).
+
 **T-shirt report** (`/Reports/Tshirts`)
 - По размерам: Requested vs Collected (checked-in) vs Stock (конфиг) vs остатки; фильтр по
   событию, экспорт.
@@ -85,14 +92,16 @@ dotnet run -c Release --launch-profile production
 - **Сессия — cookie** (`AddCookie`, `Program.cs`). Это локальный слой приложения,
   не зависящий от провайдера. Реальный IdP подключится отдельной внешней схемой, cookie
   останется сессией (см. «Заметки на будущее»).
-- **Две роли:** `Admin` (полный доступ) и `Partner` (только просмотр/поиск + отчёты,
-  без правок). Константы — `Auth/AuthConstants.cs`.
-- **Политики по действиям:** `CanView` (Admin + Partner) и `CanManage` (Admin). Страницы
-  ссылаются на политику, а маппинг «политика → роли» живёт в одном месте.
+- **Три роли:** `Admin` (полный доступ), `Partner` (просмотр/поиск + отчёты, без правок),
+  `Steward` (просмотр + чек-ин на площадке). Константы — `Auth/AuthConstants.cs`.
+- **Политики по действиям:** `CanView` (Admin + Partner + Steward), `CanManage` (Admin),
+  `CanCheckIn` (Admin + Steward). Страницы ссылаются на политику, а маппинг «политика → роли»
+  живёт в одном месте.
 - **Гейтинг — в одном месте** (Razor-конвенции в `Program.cs`), а не атрибутами по классам:
   `AuthorizeFolder("/", CanView)` секьюрит всё по умолчанию; `CanManage` точечно вешается
   на страницы/папки правок (`/Registrants/Edit`, `/Users/Create|Edit`, `/Events`,
-  `/FamilyMembers/Edit`, `/Admins`, `/Audit`). `FallbackPolicy` требует аутентификации для
+  `/FamilyMembers/Edit`, `/Sessions`, `/StartPoints`, `/Admins`, `/Audit`); `/CheckIn` —
+  политика `CanCheckIn`. `FallbackPolicy` требует аутентификации для
   любого не покрытого эндпоинта. Вход/отказ/выход — `AllowAnonymous`.
 - **Важно:** все мутации физически расположены на `CanManage`-страницах, поэтому партнёр
   не вызовет их даже сырым POST — это серверный гейт, а не только скрытие в UI.
@@ -109,11 +118,14 @@ dotnet run -c Release --launch-profile production
 
 ### Карта доступа
 
-| Область | Admin | Partner |
-|---|---|---|
-| Registrants/Users/Children (поиск), T-shirt report, экспорт, `/Registrants/Details` | ✅ | ✅ (read-only) |
-| Registrants/Edit, Users/Create+Edit, Events/*, FamilyMembers/Edit | ✅ | ⛔ |
-| /Admins, /Audit | ✅ | ⛔ |
+| Область | Admin | Partner | Steward |
+|---|---|---|---|
+| Поиск/просмотр (Registrants/Users/Children, `/Registrants/Details`), T-shirt report, экспорт | ✅ | ✅ (ro) | ✅ (ro)¹ |
+| Registrants/Edit, Users/Create+Edit, Events/*, Sessions/*, StartPoints/*, FamilyMembers/Edit | ✅ | ⛔ | ⛔ |
+| Чек-ин (`/CheckIn`, отметка чек-ина на сессии) | ✅ | ⛔ | ✅ |
+| /Admins, /Audit | ✅ | ⛔ | ⛔ |
+
+¹ Steward имеет `CanView`, но навигация для него сведена к Registrants + Check-in (остальное read-only доступно по прямому URL).
 
 ### Заметки на будущее (что и где менять)
 
@@ -180,11 +192,12 @@ dotnet run -c Release --launch-profile production
 | Event | `Events.Name` | фильтр по событиям из БД |
 | Collected bibs / Checked in at venue | `EventRegistrations.Status == CheckedIn` | **один сигнал на оба** — в схеме нет `EventType` |
 | Total kids below/above 13 | `RegistrationParticipants` + `FamilyMembers.DateOfBirth` | возраст на `Event.StartDate` |
-| **Slot/Route/Session** | — | **нет в схеме** |
+| **Slot/Route/Session** | `EventSessions` / `EventStartPoints` / `RegistrationSessions` | сессии, точки старта, выбор+чек-ин на регистрацию (v2) |
 | T-shirt **stock** | `appsettings:TshirtStock` | **нет в БД** — placeholder из конфига |
 
-Чтобы закрыть разрывы: `Events.EventType` (lookup), `EventRegistrations.SlotDetails`,
-отдельная таблица остатков футболок (либо признак фактической выдачи на участнике).
+Чтобы закрыть оставшиеся разрывы: `Events.EventType` (lookup) и отдельная таблица остатков
+футболок (либо признак фактической выдачи на участнике). Slot/Route/Session закрыт в v2
+(`EventSessions`/`EventStartPoints`/`RegistrationSessions`).
 
 ## Известные ограничения (для прода)
 
@@ -192,7 +205,7 @@ dotnet run -c Release --launch-profile production
 - **Каскады** — FK с `NO ACTION` (multiple cascade paths), удаление каскадом сделано вручную
   в транзакции; альтернатива на проде — soft-delete (PDPL/GDPR-дружественнее).
 - **Отзыв доступа** — отложенный (вступает в силу при следующем входе); см. «Заметки» п.3.
-- **Разрывы спека↔схема** — `EventType`, `Slot/Route/Session`, t-shirt `stock`.
+- **Разрывы спека↔схема** — `EventType`, t-shirt `stock` (Slot/Route/Session закрыт в v2).
 
 ## Структура
 
@@ -202,11 +215,11 @@ appsettings.json                // база с плейсхолдерами (Con
 appsettings.Development.json    // локальная строка подключения (в .gitignore)
 Properties/launchSettings.json  // профили: http/https (Development) + Production (для VM)
 Auth/
-  AuthConstants.cs              // Roles (Admin/Partner) + Policies (CanView/CanManage)
+  AuthConstants.cs              // Roles (Admin/Partner/Steward) + Policies (CanView/CanManage/CanCheckIn)
   RoleResolver.cs               // IRoleResolver: email -> роль из AdminUsers (при входе)
   OidcAuthentication.cs         // СКАФФОЛД реального IdP (закомментирован)
 Data/
-  Entities.cs                   // ...Registration/Participant + AdminUser + AuditEntry + enum
+  Entities.cs                   // ...Registration/Participant + EventSession/EventStartPoint/RegistrationSession + AdminUser + AuditEntry + enum
   AppDbContext.cs               // Fluent-маппинг на dbo.* (вкл. AdminUsers, AuditLog)
 Models/ViewModels.cs
 Services/
@@ -221,6 +234,8 @@ Pages/
   Registrants/  Index · Details (read-only) · Edit
   Users/  Index · Create · Edit
   Children/Index · Events/  Index · Edit · FamilyMembers/Edit
+  Sessions/  Index · Edit · StartPoints/  Index · Edit
+  CheckIn/Index (чек-ин на площадке, CanCheckIn)
   Reports/Tshirts
   Admins/Index (доступ) · Audit/Index (журнал)
   Shared/_Layout
@@ -234,4 +249,7 @@ sql/02_seed_small.sql      // небольшой сид данных
 sql/03_bulk_load_1m.sql    // нагрузочный объём (~1M регистраций)
 sql/04_keyset_indexes.sql  // индексы под поиск/сортировку (PhoneDigitsRev, IX_ER_Keyset, FTS)
 sql/05_auth.sql            // AdminUsers + AuditLog + сид доступа (для существующей БД — только он)
+sql/20_schema_v2.sql       // v2: EventSessions, EventStartPoints, RegistrationSessions
+sql/21_indexes_v2.sql      // v2: составные индексы (точки по порядку, чек-ин по точке)
+sql/22_seed_v2.sql         // v2: тестовый сид сессий/точек для первого события
 ```

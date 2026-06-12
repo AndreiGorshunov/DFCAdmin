@@ -61,7 +61,8 @@ GO
 MERGE dbo.AdminUsers AS t
 USING (VALUES
     (N'admin@dfc.local',   N'Admin',   N'Seed Admin'),
-    (N'partner@dfc.local', N'Partner', N'Seed Partner')
+    (N'partner@dfc.local', N'Partner', N'Seed Partner'),
+    (N'steward@dfc.local', N'Steward', N'Seed Steward')
 ) AS s(Email, Role, DisplayName)
 ON t.Email = s.Email
 WHEN NOT MATCHED THEN

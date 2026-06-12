@@ -31,6 +31,15 @@ public class EditModel : PageModel
     // Члены ростера, которых ещё нет среди участников этой регистрации.
     public IReadOnlyList<FamilyMember> AvailableToAdd { get; private set; } = Array.Empty<FamilyMember>();
 
+    // Сессии/точки старта: выборы этой регистрации и список точек события для добавления.
+    public Guid EventId { get; private set; }
+    public IReadOnlyList<SessionChoiceRow> SessionChoices { get; private set; } = Array.Empty<SessionChoiceRow>();
+    public IReadOnlyList<StartPointOption> StartPointOptions { get; private set; } = Array.Empty<StartPointOption>();
+
+    public record SessionChoiceRow(long RegistrationSessionId, string SessionName, string StartPointName,
+        TimeOnly? StartTime, TimeOnly? EndTime, bool CheckedIn, DateTime? CheckInTime);
+    public record StartPointOption(int StartPointId, string Label);
+
     public string[] Sizes => AdminWriteService.TshirtSizes;
 
     public int MaxFamily => AdminWriteService.MaxChildrenPerUser;
@@ -104,6 +113,24 @@ public class EditModel : PageModel
             .ToHashSet();
         AvailableToAdd = Family.Where(f => !participatingFmIds.Contains(f.FamilyMemberId)).ToList();
 
+        EventId = reg.EventId;
+
+        // Выбранные сессии/точки этой регистрации (одну сессию можно выбирать несколько раз).
+        SessionChoices = await _db.RegistrationSessions.AsNoTracking()
+            .Where(rs => rs.RegistrationId == Id)
+            .OrderBy(rs => rs.Session.Name).ThenBy(rs => rs.StartPoint.DisplayOrder)
+            .Select(rs => new SessionChoiceRow(
+                rs.RegistrationSessionId, rs.Session.Name, rs.StartPoint.Name,
+                rs.StartPoint.StartTime, rs.StartPoint.EndTime, rs.CheckedIn, rs.CheckInTime))
+            .ToListAsync(ct);
+
+        // Все точки старта события (для выпадающего списка «добавить»; точка однозначно задаёт сессию).
+        StartPointOptions = await _db.EventStartPoints.AsNoTracking()
+            .Where(sp => sp.Session.EventId == reg.EventId)
+            .OrderBy(sp => sp.Session.Name).ThenBy(sp => sp.DisplayOrder)
+            .Select(sp => new StartPointOption(sp.StartPointId, sp.Session.Name + " — " + sp.Name))
+            .ToListAsync(ct);
+
         if (fillInput)
         {
             Input = new InputModel
@@ -161,6 +188,41 @@ public class EditModel : PageModel
     {
         await _write.SetParticipantTshirtAsync(participantId, tshirtSize, ct);
         Notice = "T-shirt size updated.";
+        return RedirectToPage(new { Id });
+    }
+
+    // ----- Сессии и чек-ин этой регистрации -----
+
+    public async Task<IActionResult> OnPostAddSessionAsync(int startPointId, CancellationToken ct)
+    {
+        // Точка старта однозначно задаёт сессию — выводим sessionId из неё.
+        var sessionId = await _write.SessionIdOfStartPointAsync(startPointId, ct);
+        if (sessionId == 0)
+        {
+            ModelState.Clear(); Error = "Start point not found.";
+            await LoadAsync(ct, fillInput: true); return Page();
+        }
+        var (ok, err) = await _write.AssignSessionAsync(Id, sessionId, startPointId, ct);
+        if (!ok)
+        {
+            ModelState.Clear(); Error = err;
+            await LoadAsync(ct, fillInput: true); return Page();
+        }
+        Notice = "Session selection added.";
+        return RedirectToPage(new { Id });
+    }
+
+    public async Task<IActionResult> OnPostRemoveSessionAsync(long registrationSessionId, CancellationToken ct)
+    {
+        await _write.RemoveRegistrationSessionAsync(registrationSessionId, ct);
+        Notice = "Session selection removed.";
+        return RedirectToPage(new { Id });
+    }
+
+    public async Task<IActionResult> OnPostSetSessionCheckedInAsync(long registrationSessionId, bool checkedIn, CancellationToken ct)
+    {
+        await _write.SetSessionCheckedInAsync(registrationSessionId, checkedIn, ct);
+        Notice = checkedIn ? "Checked in." : "Check-in undone.";
         return RedirectToPage(new { Id });
     }
 

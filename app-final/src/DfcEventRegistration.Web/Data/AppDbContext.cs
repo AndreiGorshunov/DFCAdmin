@@ -11,6 +11,9 @@ public class AppDbContext : DbContext
     public DbSet<FamilyMember> FamilyMembers => Set<FamilyMember>();
     public DbSet<EventRegistration> EventRegistrations => Set<EventRegistration>();
     public DbSet<RegistrationParticipant> RegistrationParticipants => Set<RegistrationParticipant>();
+    public DbSet<EventSession> EventSessions => Set<EventSession>();
+    public DbSet<EventStartPoint> EventStartPoints => Set<EventStartPoint>();
+    public DbSet<RegistrationSession> RegistrationSessions => Set<RegistrationSession>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
     public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
 
@@ -72,6 +75,52 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.FamilyMember)
              .WithMany()
              .HasForeignKey(x => x.FamilyMemberId)
+             .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        b.Entity<EventSession>(e =>
+        {
+            e.ToTable("EventSessions", "dbo");
+            e.HasKey(x => x.SessionId);
+            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
+
+            e.HasOne(x => x.Event)
+             .WithMany()
+             .HasForeignKey(x => x.EventId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasMany(x => x.StartPoints)
+             .WithOne(p => p.Session)
+             .HasForeignKey(p => p.SessionId)
+             .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        b.Entity<EventStartPoint>(e =>
+        {
+            e.ToTable("EventStartPoints", "dbo");
+            e.HasKey(x => x.StartPointId);
+            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            // TimeOnly? -> SQL TIME(0); EF Core 8+ маппит автоматически.
+        });
+
+        b.Entity<RegistrationSession>(e =>
+        {
+            e.ToTable("RegistrationSessions", "dbo");
+            e.HasKey(x => x.RegistrationSessionId);
+
+            e.HasOne(x => x.Registration)
+             .WithMany()
+             .HasForeignKey(x => x.RegistrationId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(x => x.Session)
+             .WithMany()
+             .HasForeignKey(x => x.SessionId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(x => x.StartPoint)
+             .WithMany()
+             .HasForeignKey(x => x.StartPointId)
              .OnDelete(DeleteBehavior.NoAction);
         });
 

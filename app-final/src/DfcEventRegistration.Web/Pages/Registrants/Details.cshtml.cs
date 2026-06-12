@@ -19,7 +19,13 @@ public class DetailsModel : PageModel
     [BindProperty(SupportsGet = true)] public long Id { get; set; }   // RegistrationId
 
     public string EventName { get; private set; } = "";
+    public Guid EventId { get; private set; }
     public int UserRegistrationCount { get; private set; }
+
+    public IReadOnlyList<SessionChoiceRow> SessionChoices { get; private set; } = Array.Empty<SessionChoiceRow>();
+
+    public record SessionChoiceRow(string SessionName, string StartPointName,
+        TimeOnly? StartTime, TimeOnly? EndTime, bool CheckedIn, DateTime? CheckInTime);
 
     public PersonView Person { get; private set; } = new();
     public RegistrationView Reg { get; private set; } = new();
@@ -60,6 +66,7 @@ public class DetailsModel : PageModel
         if (reg is null) return NotFound();
 
         EventName = reg.Event.Name;
+        EventId = reg.EventId;
         UserRegistrationCount = await _db.EventRegistrations.CountAsync(r => r.UserId == reg.UserId, ct);
 
         Person = new PersonView
@@ -97,6 +104,15 @@ public class DetailsModel : PageModel
         Family = await _db.FamilyMembers.AsNoTracking()
             .Where(f => f.UserId == reg.UserId)
             .OrderBy(f => f.FamilyMemberId)
+            .ToListAsync(ct);
+
+        // Выбранные сессии и точки старта + статус чек-ина (read-only).
+        SessionChoices = await _db.RegistrationSessions.AsNoTracking()
+            .Where(rs => rs.RegistrationId == Id)
+            .OrderBy(rs => rs.Session.Name).ThenBy(rs => rs.StartPoint.DisplayOrder)
+            .Select(rs => new SessionChoiceRow(
+                rs.Session.Name, rs.StartPoint.Name, rs.StartPoint.StartTime, rs.StartPoint.EndTime,
+                rs.CheckedIn, rs.CheckInTime))
             .ToListAsync(ct);
 
         return Page();

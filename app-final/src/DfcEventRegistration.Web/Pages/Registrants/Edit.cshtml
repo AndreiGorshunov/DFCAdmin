@@ -133,6 +133,75 @@
     }
 </div>
 
+<!-- ============ Sessions & check-in ============ -->
+<div class="card">
+    <h2>Sessions &amp; check-in</h2>
+    <p class="muted small">
+        Sessions and start points for <strong>@Model.EventName</strong> this registration is assigned to.
+        One session can be selected more than once. Check-in can also be done on the
+        <a asp-page="/CheckIn/Index">Check-in</a> screen.
+    </p>
+
+    <table class="grid">
+        <thead><tr><th>Session</th><th>Start point</th><th>Time</th><th>Checked in</th><th></th></tr></thead>
+        <tbody>
+            @if (Model.SessionChoices.Count == 0)
+            {
+                <tr><td colspan="5" class="muted center">No session selections.</td></tr>
+            }
+            @foreach (var s in Model.SessionChoices)
+            {
+                <tr>
+                    <td><strong>@s.SessionName</strong></td>
+                    <td>@s.StartPointName</td>
+                    <td>@(s.StartTime?.ToString("HH\\:mm") ?? "—")@(s.EndTime is null ? "" : "–" + s.EndTime.Value.ToString("HH\\:mm"))</td>
+                    <td>
+                        @if (s.CheckedIn)
+                        {
+                            <span>Yes@(s.CheckInTime is null ? "" : " · " + s.CheckInTime.Value.ToString("yyyy-MM-dd HH:mm"))</span>
+                        }
+                        else
+                        {
+                            <span class="muted">No</span>
+                        }
+                    </td>
+                    <td class="row-actions">
+                        <form method="post" asp-page-handler="SetSessionCheckedIn" asp-route-id="@Model.Id" class="inline-form">
+                            <input type="hidden" name="registrationSessionId" value="@s.RegistrationSessionId" />
+                            <input type="hidden" name="checkedIn" value="@((!s.CheckedIn).ToString().ToLowerInvariant())" />
+                            <button type="submit" class="btn-link">@(s.CheckedIn ? "Undo check-in" : "Check in")</button>
+                        </form>
+                        <form method="post" asp-page-handler="RemoveSession" asp-route-id="@Model.Id" class="inline-form"
+                              onsubmit="return confirm('Remove this session selection?');">
+                            <input type="hidden" name="registrationSessionId" value="@s.RegistrationSessionId" />
+                            <button type="submit" class="link-danger">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h3>Add a session selection</h3>
+    @if (Model.StartPointOptions.Count == 0)
+    {
+        <p class="muted">No sessions/start points defined for this event.
+            <a asp-page="/Sessions/Index" asp-route-eventId="@Model.EventId">Set them up</a>.</p>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="AddSession" asp-route-id="@Model.Id" class="inline-form">
+            <select name="startPointId">
+                @foreach (var o in Model.StartPointOptions)
+                {
+                    <option value="@o.StartPointId">@o.Label</option>
+                }
+            </select>
+            <button type="submit" class="btn-secondary">Add selection</button>
+        </form>
+    }
+</div>
+
 <!-- ============ Family roster (person-level) ============ -->
 <div class="card">
     <h2>Family roster <span class="muted small">(shared across all of this person's registrations)</span></h2>
