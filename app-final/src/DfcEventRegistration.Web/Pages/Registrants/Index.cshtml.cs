@@ -26,6 +26,8 @@ public class IndexModel : PageModel
     [BindProperty(SupportsGet = true)] public Guid? EventId { get; set; }
     [BindProperty(SupportsGet = true)] public RegistrationStatus? Status { get; set; }
     [BindProperty(SupportsGet = true)] public ParticipantKind? ParticipantType { get; set; }
+    [BindProperty(SupportsGet = true)] public int? SessionId { get; set; }
+    [BindProperty(SupportsGet = true)] public int? StartPointId { get; set; }
     [BindProperty(SupportsGet = true)] public string? Sort { get; set; }
     [BindProperty(SupportsGet = true)] public string? Dir { get; set; }
     [BindProperty(SupportsGet = true)] public int PageSize { get; set; } = 25;
@@ -40,6 +42,8 @@ public class IndexModel : PageModel
     // --- Данные для view ---
     public IReadOnlyList<RegistrantRow> Rows { get; private set; } = Array.Empty<RegistrantRow>();
     public IReadOnlyList<EventOption> Events { get; private set; } = Array.Empty<EventOption>();
+    public IReadOnlyList<SessionOption> Sessions { get; private set; } = Array.Empty<SessionOption>();
+    public IReadOnlyList<StartPointOption> StartPoints { get; private set; } = Array.Empty<StartPointOption>();
 
     public bool UseKeyset { get; private set; }
     public bool HasNext { get; private set; }
@@ -109,7 +113,7 @@ public class IndexModel : PageModel
             $"registrants_all_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
     }
 
-    private RegistrantFilter Filter() => new() { Q = Q, EventId = EventId, Status = Status, ParticipantType = ParticipantType };
+    private RegistrantFilter Filter() => new() { Q = Q, EventId = EventId, Status = Status, ParticipantType = ParticipantType, SessionId = SessionId, StartPointId = StartPointId };
 
     private bool IsDefaultOrder()
     {
@@ -127,6 +131,24 @@ public class IndexModel : PageModel
             .OrderBy(e => e.StartDate)
             .Select(e => new EventOption(e.Id, e.Name))
             .ToListAsync(ct);
+
+        // Зависимые списки: сессии выбранного события, точки выбранной сессии.
+        // Клампим невалидные комбинации (напр. сессия осталась от другого события).
+        if (EventId is Guid evId)
+        {
+            Sessions = await _db.EventSessions.AsNoTracking()
+                .Where(s => s.EventId == evId).OrderBy(s => s.Name)
+                .Select(s => new SessionOption(s.SessionId, s.Name)).ToListAsync(ct);
+        }
+        if (SessionId is int sidSel && !Sessions.Any(s => s.Id == sidSel)) SessionId = null;
+
+        if (SessionId is int sid2)
+        {
+            StartPoints = await _db.EventStartPoints.AsNoTracking()
+                .Where(p => p.SessionId == sid2).OrderBy(p => p.DisplayOrder).ThenBy(p => p.Name)
+                .Select(p => new StartPointOption(p.StartPointId, p.Name)).ToListAsync(ct);
+        }
+        if (StartPointId is int spidSel && !StartPoints.Any(p => p.Id == spidSel)) StartPointId = null;
 
         var f = Filter();
         var ordered = _svc.ApplySort(_svc.Query(f), Sort, Dir);

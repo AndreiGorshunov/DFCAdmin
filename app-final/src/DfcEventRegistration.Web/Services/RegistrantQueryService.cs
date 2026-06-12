@@ -26,6 +26,14 @@ public class RegistrantQueryService
         if (f.Status is RegistrationStatus st)
             q = q.Where(r => r.Status == st);
 
+        // Фильтры по сессии/точке старта — EXISTS по RegistrationSessions (грейн остаётся =
+        // регистрация, даже если выборов несколько). StartPoint уже задаёт свою сессию.
+        if (f.SessionId is int sid)
+            q = q.Where(r => _db.RegistrationSessions.Any(rs => rs.RegistrationId == r.RegistrationId && rs.SessionId == sid));
+
+        if (f.StartPointId is int spid)
+            q = q.Where(r => _db.RegistrationSessions.Any(rs => rs.RegistrationId == r.RegistrationId && rs.StartPointId == spid));
+
         // Тип участника (exclusive-семантика, грейн остаётся = регистрация):
         // Adults  -> регистрации БЕЗ детей (нет участника с FamilyMemberId != null).
         // Children-> регистрации С детьми (есть участник с FamilyMemberId != null).

@@ -40,6 +40,7 @@
                 <td class="num">@(p.Capacity?.ToString("N0") ?? "—")</td>
                 <td class="num">@p.Registrations.ToString("N0")</td>
                 <td class="row-actions">
+                    <a asp-page="/StartPoints/Details" asp-route-startPointId="@p.StartPointId">Registrants</a>
                     <a asp-page="/StartPoints/Edit" asp-route-id="@p.StartPointId" asp-route-sessionId="@Model.SessionId">Edit</a>
                     <form method="post" asp-page-handler="Delete" class="inline-delete"
                           onsubmit="return confirm('Delete this start point@(p.Registrations > 0 ? " and its " + p.Registrations.ToString("N0") + " selection(s)" : "")?');">

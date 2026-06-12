@@ -35,9 +35,12 @@ public class EditModel : PageModel
     public Guid EventId { get; private set; }
     public IReadOnlyList<SessionChoiceRow> SessionChoices { get; private set; } = Array.Empty<SessionChoiceRow>();
     public IReadOnlyList<StartPointOption> StartPointOptions { get; private set; } = Array.Empty<StartPointOption>();
+    // Точки старта по сессии — для дропдауна «сменить волну» у уже выбранной сессии.
+    public IReadOnlyDictionary<int, IReadOnlyList<StartPointOption>> SessionStartPoints { get; private set; }
+        = new Dictionary<int, IReadOnlyList<StartPointOption>>();
 
-    public record SessionChoiceRow(long RegistrationSessionId, string SessionName, string StartPointName,
-        TimeOnly? StartTime, TimeOnly? EndTime, bool CheckedIn, DateTime? CheckInTime);
+    public record SessionChoiceRow(long RegistrationSessionId, int SessionId, string SessionName,
+        int StartPointId, string StartPointName, TimeOnly? StartTime, TimeOnly? EndTime, bool CheckedIn, DateTime? CheckInTime);
     public record StartPointOption(int StartPointId, string Label);
 
     public string[] Sizes => AdminWriteService.TshirtSizes;
@@ -120,16 +123,31 @@ public class EditModel : PageModel
             .Where(rs => rs.RegistrationId == Id)
             .OrderBy(rs => rs.Session.Name).ThenBy(rs => rs.StartPoint.DisplayOrder)
             .Select(rs => new SessionChoiceRow(
-                rs.RegistrationSessionId, rs.Session.Name, rs.StartPoint.Name,
+                rs.RegistrationSessionId, rs.SessionId, rs.Session.Name,
+                rs.StartPointId, rs.StartPoint.Name,
                 rs.StartPoint.StartTime, rs.StartPoint.EndTime, rs.CheckedIn, rs.CheckInTime))
             .ToListAsync(ct);
 
-        // Все точки старта события (для выпадающего списка «добавить»; точка однозначно задаёт сессию).
+        // Все точки старта события ДЛЯ ДОБАВЛЕНИЯ — исключаем сессии, которые у этой регистрации
+        // уже выбраны (одна точка на сессию). Точка однозначно задаёт сессию.
         StartPointOptions = await _db.EventStartPoints.AsNoTracking()
-            .Where(sp => sp.Session.EventId == reg.EventId)
+            .Where(sp => sp.Session.EventId == reg.EventId
+                && !_db.RegistrationSessions.Any(rs => rs.RegistrationId == Id && rs.SessionId == sp.SessionId))
             .OrderBy(sp => sp.Session.Name).ThenBy(sp => sp.DisplayOrder)
             .Select(sp => new StartPointOption(sp.StartPointId, sp.Session.Name + " — " + sp.Name))
             .ToListAsync(ct);
+
+        // Точки старта уже выбранных сессий — для «сменить волну» на строке.
+        var chosenSessionIds = SessionChoices.Select(s => s.SessionId).Distinct().ToList();
+        var spBySession = await _db.EventStartPoints.AsNoTracking()
+            .Where(sp => chosenSessionIds.Contains(sp.SessionId))
+            .OrderBy(sp => sp.DisplayOrder).ThenBy(sp => sp.Name)
+            .Select(sp => new { sp.SessionId, sp.StartPointId, sp.Name })
+            .ToListAsync(ct);
+        SessionStartPoints = spBySession
+            .GroupBy(x => x.SessionId)
+            .ToDictionary(g => g.Key,
+                g => (IReadOnlyList<StartPointOption>)g.Select(x => new StartPointOption(x.StartPointId, x.Name)).ToList());
 
         if (fillInput)
         {
@@ -223,6 +241,15 @@ public class EditModel : PageModel
     {
         await _write.SetSessionCheckedInAsync(registrationSessionId, checkedIn, ct);
         Notice = checkedIn ? "Checked in." : "Check-in undone.";
+        return RedirectToPage(new { Id });
+    }
+
+    // Сменить точку старта у выбора (волну). Одна строка на регистрацию -> меняется для всей семьи.
+    public async Task<IActionResult> OnPostReassignSessionAsync(long registrationSessionId, int startPointId, CancellationToken ct)
+    {
+        var (ok, err) = await _write.ReassignSessionAsync(registrationSessionId, startPointId, ct);
+        if (!ok) { ModelState.Clear(); Error = err; await LoadAsync(ct, fillInput: true); return Page(); }
+        Notice = "Start point changed for the whole registration (family).";
         return RedirectToPage(new { Id });
     }
 

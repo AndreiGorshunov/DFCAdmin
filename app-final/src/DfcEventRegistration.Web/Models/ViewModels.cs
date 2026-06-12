@@ -29,6 +29,11 @@ public class RegistrantFilter
 
     /// <summary>Фильтр по типу участника регистрации (EXISTS по RegistrationParticipants).</summary>
     public ParticipantKind? ParticipantType { get; set; }
+
+    /// <summary>Фильтр по сессии события (EXISTS по RegistrationSessions). Зависит от выбранного события.</summary>
+    public int? SessionId { get; set; }
+    /// <summary>Фильтр по точке старта (EXISTS по RegistrationSessions). Зависит от выбранной сессии.</summary>
+    public int? StartPointId { get; set; }
 }
 
 /// <summary>
@@ -72,6 +77,8 @@ public class ChildFilter
 }
 
 public record EventOption(Guid Id, string Name);
+public record SessionOption(int Id, string Name);
+public record StartPointOption(int Id, string Name);
 
 public class TshirtReportRow
 {

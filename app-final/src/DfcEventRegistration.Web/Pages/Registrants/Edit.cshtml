@@ -137,9 +137,9 @@
 <div class="card">
     <h2>Sessions &amp; check-in</h2>
     <p class="muted small">
-        Sessions and start points for <strong>@Model.EventName</strong> this registration is assigned to.
-        One session can be selected more than once. Check-in can also be done on the
-        <a asp-page="/CheckIn/Index">Check-in</a> screen.
+        Sessions and start points for <strong>@Model.EventName</strong> this registration is assigned to —
+        one start point per session. Selections and check-in apply to the <strong>whole registration</strong>
+        (registrant + children). Check-in can also be done on the <a asp-page="/CheckIn/Index">Check-in</a> screen.
     </p>
 
     <table class="grid">
@@ -166,6 +166,16 @@
                         }
                     </td>
                     <td class="row-actions">
+                        <form method="post" asp-page-handler="ReassignSession" asp-route-id="@Model.Id" class="inline-form">
+                            <input type="hidden" name="registrationSessionId" value="@s.RegistrationSessionId" />
+                            <select name="startPointId">
+                                @foreach (var o in Model.SessionStartPoints[s.SessionId])
+                                {
+                                    <option value="@o.StartPointId" selected="@(o.StartPointId == s.StartPointId)">@o.Label</option>
+                                }
+                            </select>
+                            <button type="submit" class="btn-link">Change wave</button>
+                        </form>
                         <form method="post" asp-page-handler="SetSessionCheckedIn" asp-route-id="@Model.Id" class="inline-form">
                             <input type="hidden" name="registrationSessionId" value="@s.RegistrationSessionId" />
                             <input type="hidden" name="checkedIn" value="@((!s.CheckedIn).ToString().ToLowerInvariant())" />
@@ -185,8 +195,8 @@
     <h3>Add a session selection</h3>
     @if (Model.StartPointOptions.Count == 0)
     {
-        <p class="muted">No sessions/start points defined for this event.
-            <a asp-page="/Sessions/Index" asp-route-eventId="@Model.EventId">Set them up</a>.</p>
+        <p class="muted">No more sessions to add (all already selected, or none defined).
+            <a asp-page="/Sessions/Index" asp-route-eventId="@Model.EventId">Manage sessions</a>.</p>
     }
     else
     {

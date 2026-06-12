@@ -32,8 +32,10 @@
         <h2>@Model.RegistrantName</h2>
         <p class="muted small">
             Event: <strong>@Model.EventName</strong> · Registration #@Model.RegistrationId
+            @if (Model.PartySize > 0) { <text> · Party: <strong>@Model.PartySize</strong> (registrant + children)</text> }
             @if (!string.IsNullOrEmpty(Model.QrCode)) { <text> · QR: <code>@Model.QrCode</code></text> }
         </p>
+        <p class="muted small">Checking in a session checks in the <strong>whole registration</strong> — the registrant and the children on it.</p>
 
         <table class="grid">
             <thead><tr><th>Session</th><th>Start point</th><th>Time</th><th>Checked in</th><th></th></tr></thead>
@@ -70,5 +72,25 @@
                 }
             </tbody>
         </table>
+
+        <h3>Walk-up: assign a start point</h3>
+        @if (Model.StartPointOptions.Count == 0)
+        {
+            <p class="muted">No more sessions to assign (all already selected, or none defined for this event).</p>
+        }
+        else
+        {
+            <form method="post" asp-page-handler="Assign" class="inline-form">
+                <input type="hidden" name="registrationId" value="@Model.RegistrationId" />
+                <input type="hidden" name="q" value="@Model.Q" />
+                <select name="startPointId">
+                    @foreach (var o in Model.StartPointOptions)
+                    {
+                        <option value="@o.StartPointId">@o.Label</option>
+                    }
+                </select>
+                <button type="submit" class="btn-secondary">Assign &amp; check in</button>
+            </form>
+        }
     </div>
 }

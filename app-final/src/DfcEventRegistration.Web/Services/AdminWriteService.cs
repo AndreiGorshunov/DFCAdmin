@@ -484,13 +484,14 @@ public class AdminWriteService
         }
 
         // Инвариант (вариант 2): MaxParticipants сессии не больше суммы Capacity её точек старта.
-        // При создании точек ещё нет -> проверять нечего; при правке — сверяем с текущими точками.
+        // На создании лимит ВСЕГДА null (точек ещё нет) — его ставят позже, когда точки финальны;
+        // при правке — сверяем с текущими точками.
         if (!isNew && await ValidateSessionCapacityAsync(s.SessionId, e.MaxParticipants, ct) is string capErr)
             return (false, capErr, 0);
 
         s.Name = e.Name.Trim();
         s.Description = string.IsNullOrWhiteSpace(e.Description) ? null : e.Description;
-        s.MaxParticipants = e.MaxParticipants;
+        s.MaxParticipants = isNew ? null : e.MaxParticipants;
 
         await _db.SaveChangesAsync(ct);
         _audit.Stage(isNew ? "Session.Create" : "Session.Update", "EventSession", s.SessionId.ToString(), $"name={s.Name}");
@@ -605,10 +606,11 @@ public class AdminWriteService
 
     // --- Registration sessions (выбор + чек-ин) ---
 
-    /// <summary>Добавить выбор сессии+точки для регистрации. Одну сессию можно
-    /// выбирать несколько раз — всегда создаётся новая строка (см. ReassignSessionAsync для смены точки).</summary>
+    /// <summary>Добавить выбор сессии+точки для регистрации. Одна точка старта на сессию:
+    /// если выбор этой сессии уже есть — дубль не создаётся (гарантия — UX-индекс
+    /// UX_RegistrationSessions_Reg_Session). Сменить точку -> remove+add или ReassignSessionAsync.</summary>
     public async Task<(bool ok, string? error)> AssignSessionAsync(
-        long registrationId, int sessionId, int startPointId, CancellationToken ct = default)
+        long registrationId, int sessionId, int startPointId, CancellationToken ct = default, bool checkInNow = false)
     {
         var regEventId = await _db.EventRegistrations.Where(r => r.RegistrationId == registrationId)
             .Select(r => (Guid?)r.EventId).FirstOrDefaultAsync(ct);
@@ -623,18 +625,107 @@ public class AdminWriteService
         bool spOk = await _db.EventStartPoints.AnyAsync(x => x.StartPointId == startPointId && x.SessionId == sessionId, ct);
         if (!spOk) return (false, "Start point does not belong to this session.");
 
-        // Одну сессию можно выбирать несколько раз -> всегда добавляем новую строку.
-        // Сменить точку у конкретного выбора -> ReassignSessionAsync(registrationSessionId, ...).
+        // Одна точка старта на сессию: если выбор этой сессии уже есть -> не дублируем.
+        // (UX-индекс UX_RegistrationSessions_Reg_Session — жёсткая гарантия; здесь дружелюбная ошибка.)
+        bool already = await _db.RegistrationSessions.AnyAsync(x => x.RegistrationId == registrationId && x.SessionId == sessionId, ct);
+        if (already) return (false, "This registration already has a start point for this session. Remove it first to pick another.");
+
+        // Ёмкость точки старта — жёсткая квота: нельзя назначить сверх Capacity (null = безлимит).
+        // Занятые места — по уже существующим выборам этой точки. Проверка не атомарна
+        // с insert (last-write-wins, как и везде в приложении) — для админ/стьюард-нагрузки это приемлемо.
+        // TODO(capacity-race): если для каких-то точек перебор на 1 недопустим — использовать
+        // AssignSessionAtomicAsync (SERIALIZABLE) либо вынести в SP с пересчётом под UPDLOCK/HOLDLOCK.
+        var capacity = await _db.EventStartPoints.Where(x => x.StartPointId == startPointId)
+            .Select(x => x.Capacity).FirstOrDefaultAsync(ct);
+        if (capacity is int cap)
+        {
+            int taken = await _db.RegistrationSessions.CountAsync(x => x.StartPointId == startPointId, ct);
+            if (taken >= cap)
+                return (false, $"Start point is full ({taken}/{cap}). Pick another start point.");
+        }
+
+        // Одна точка старта на сессию (проверено выше) -> добавляем строку выбора.
+        // checkInNow = true (walk-up на /CheckIn): сразу отмечаем чек-ин. Сменить точку -> ReassignSessionAsync.
         _db.RegistrationSessions.Add(new RegistrationSession
         {
             RegistrationId = registrationId,
             SessionId = sessionId,
             StartPointId = startPointId,
-            CheckedIn = false
+            CheckedIn = checkInNow,
+            CheckInTime = checkInNow ? DateTime.UtcNow : null
         });
-        _audit.Stage("RegistrationSession.Assign", "Registration", registrationId.ToString(), $"sessionId={sessionId},startPointId={startPointId}");
+        _audit.Stage(checkInNow ? "RegistrationSession.AssignCheckedIn" : "RegistrationSession.Assign",
+            "Registration", registrationId.ToString(), $"sessionId={sessionId},startPointId={startPointId}");
 
+        // Страховка от гонки: параллельный дубль (Reg+Session) отловит UX-индекс -> дружелюбная ошибка.
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateException) { return (false, "This registration already has a start point for this session."); }
+        return (true, null);
+    }
+
+    /// <summary>
+    /// СТРОГАЯ (атомарная) версия AssignSessionAsync: проверка квоты и вставка под
+    /// SERIALIZABLE-транзакцией — на момент COUNT берётся range-lock по StartPointId,
+    /// поэтому два параллельных назначения не могут одновременно «пробить» Capacity (нет
+    /// перебора на границе). Плата — риск блокировок/дедлоков под нагрузкой, поэтому по
+    /// умолчанию UI использует нестрогую AssignSessionAsync (last-write-wins).
+    ///
+    /// Переключить нужные пути (walk-up на /CheckIn, назначение в Registrants/Edit) на этот
+    /// метод, если перебор на 1 недопустим. «Фильтрованный unique index» не подходит:
+    /// уникальность не выражает лимит по счёту (Capacity разная у разных точек).
+    /// </summary>
+    public async Task<(bool ok, string? error)> AssignSessionAtomicAsync(
+        long registrationId, int sessionId, int startPointId, CancellationToken ct = default, bool checkInNow = false)
+    {
+        var regEventId = await _db.EventRegistrations.Where(r => r.RegistrationId == registrationId)
+            .Select(r => (Guid?)r.EventId).FirstOrDefaultAsync(ct);
+        if (regEventId is null) return (false, "Registration not found.");
+
+        var sessionEventId = await _db.EventSessions.Where(s => s.SessionId == sessionId)
+            .Select(s => (Guid?)s.EventId).FirstOrDefaultAsync(ct);
+        if (sessionEventId is null) return (false, "Session not found.");
+        if (sessionEventId.Value != regEventId.Value)
+            return (false, "Session belongs to a different event than the registration.");
+
+        bool spOk = await _db.EventStartPoints.AnyAsync(x => x.StartPointId == startPointId && x.SessionId == sessionId, ct);
+        if (!spOk) return (false, "Start point does not belong to this session.");
+
+        var capacity = await _db.EventStartPoints.Where(x => x.StartPointId == startPointId)
+            .Select(x => x.Capacity).FirstOrDefaultAsync(ct);
+
+        await using var tx = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
+
+        // Одна точка старта на сессию: дубль не создаём (под той же tx — атомарно с проверкой квоты).
+        if (await _db.RegistrationSessions.AnyAsync(x => x.RegistrationId == registrationId && x.SessionId == sessionId, ct))
+        {
+            await tx.RollbackAsync(ct);
+            return (false, "This registration already has a start point for this session. Remove it first to pick another.");
+        }
+
+        if (capacity is int cap)
+        {
+            // COUNT под SERIALIZABLE берёт range-lock -> параллельная вставка в эту точку подождёт commit.
+            int taken = await _db.RegistrationSessions.CountAsync(x => x.StartPointId == startPointId, ct);
+            if (taken >= cap)
+            {
+                await tx.RollbackAsync(ct);
+                return (false, $"Start point is full ({taken}/{cap}). Pick another start point.");
+            }
+        }
+
+        _db.RegistrationSessions.Add(new RegistrationSession
+        {
+            RegistrationId = registrationId,
+            SessionId = sessionId,
+            StartPointId = startPointId,
+            CheckedIn = checkInNow,
+            CheckInTime = checkInNow ? DateTime.UtcNow : null
+        });
+        _audit.Stage(checkInNow ? "RegistrationSession.AssignCheckedIn" : "RegistrationSession.Assign",
+            "Registration", registrationId.ToString(), $"sessionId={sessionId},startPointId={startPointId}");
         await _db.SaveChangesAsync(ct);
+
+        await tx.CommitAsync(ct);
         return (true, null);
     }
 
@@ -647,6 +738,20 @@ public class AdminWriteService
 
         bool spOk = await _db.EventStartPoints.AnyAsync(x => x.StartPointId == startPointId && x.SessionId == rs.SessionId, ct);
         if (!spOk) return (false, "Start point does not belong to this session.");
+
+        // Если точка реально меняется — проверяем квоту целевой точки (как в AssignSessionAsync).
+        // TODO(capacity-race): та же неатомарность, что и в AssignSessionAsync (см. AssignSessionAtomicAsync).
+        if (rs.StartPointId != startPointId)
+        {
+            var capacity = await _db.EventStartPoints.Where(x => x.StartPointId == startPointId)
+                .Select(x => x.Capacity).FirstOrDefaultAsync(ct);
+            if (capacity is int cap)
+            {
+                int taken = await _db.RegistrationSessions.CountAsync(x => x.StartPointId == startPointId, ct);
+                if (taken >= cap)
+                    return (false, $"Start point is full ({taken}/{cap}). Pick another start point.");
+            }
+        }
 
         rs.StartPointId = startPointId;
         _audit.Stage("RegistrationSession.Reassign", "RegistrationSession", registrationSessionId.ToString(), $"startPointId={startPointId}");

@@ -122,6 +122,12 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(x => x.StartPointId)
              .OnDelete(DeleteBehavior.NoAction);
+
+            // Одна точка старта на сессию для регистрации: участвовать можно в нескольких
+            // сессиях, но в каждой — ровно один выбор (без дублей). Зеркалит UX-индекс из SQL (25).
+            e.HasIndex(x => new { x.RegistrationId, x.SessionId })
+             .IsUnique()
+             .HasDatabaseName("UX_RegistrationSessions_Reg_Session");
         });
 
         b.Entity<AdminUser>(e =>

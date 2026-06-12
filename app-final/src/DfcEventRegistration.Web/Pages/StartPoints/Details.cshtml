@@ -1,0 +1,67 @@
+@page
+@model DfcEventRegistration.Web.Pages.StartPoints.DetailsModel
+@using DfcEventRegistration.Web.Data
+@{
+    ViewData["Title"] = "Start point registrants";
+}
+
+<p class="muted"><a asp-page="/StartPoints/Index" asp-route-sessionId="@Model.SessionId">‹ Back to start points</a></p>
+<h1>@Model.StartPointName <span class="muted small">— @Model.SessionName · @Model.EventName</span></h1>
+
+<div class="card">
+    <table class="grid">
+        <tbody>
+            <tr><th>Time</th><td>@(Model.StartTime?.ToString("HH\\:mm") ?? "—")@(Model.EndTime is null ? "" : "–" + Model.EndTime.Value.ToString("HH\\:mm"))</td></tr>
+            <tr><th>Capacity</th><td>@(Model.Capacity?.ToString("N0") ?? "— (unlimited)")</td></tr>
+            <tr><th>Assigned</th><td>@Model.Occupied.ToString("N0")@(Model.Remaining is int rem ? $" · {rem:N0} free" : "")</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<form method="get" class="filters">
+    <input type="hidden" name="startPointId" value="@Model.StartPointId" />
+    <input type="text" name="Q" value="@Model.Q" placeholder="Email / name / phone…" />
+    <select name="Status">
+        <option value="">— Any status —</option>
+        @foreach (RegistrationStatus s in Enum.GetValues<RegistrationStatus>())
+        {
+            <option value="@s" selected="@(Model.Status == s)">@s</option>
+        }
+    </select>
+    <button type="submit">Apply</button>
+    <a class="btn-secondary" asp-page="/StartPoints/Details" asp-route-startPointId="@Model.StartPointId">Reset</a>
+</form>
+
+@if (Model.Capped)
+{
+    <p class="muted">Showing the first 1,000 matches.</p>
+}
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Email</th><th>First name</th><th>Last name</th><th>Mobile</th><th>Group</th>
+            <th>Reg. status</th><th class="num">Kids &lt;13</th><th class="num">Kids ≥13</th><th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="9" class="muted center">No registrants assigned to this start point match the filters.</td></tr>
+        }
+        @foreach (var r in Model.Rows)
+        {
+            <tr>
+                <td>@r.Email</td>
+                <td>@r.FirstName</td>
+                <td>@r.LastName</td>
+                <td>@r.Mobile</td>
+                <td>@r.GroupCode</td>
+                <td>@r.Status</td>
+                <td class="num">@r.KidsBelow13</td>
+                <td class="num">@r.KidsAbove13</td>
+                <td><a asp-page="/Registrants/Edit" asp-route-id="@r.RegistrationId">Edit</a></td>
+            </tr>
+        }
+    </tbody>
+</table>

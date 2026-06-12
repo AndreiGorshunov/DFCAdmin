@@ -20,7 +20,16 @@
 
     <label>Description<textarea asp-for="Input.Description" rows="3"></textarea></label>
 
-    <label>Max participants<input type="number" min="0" asp-for="Input.MaxParticipants" /></label>
+    @if (Model.IsNew)
+    {
+        <p class="muted small">Max participants задаётся после создания точек старта (лимит сессии ≤ сумме их ёмкостей).</p>
+    }
+    else
+    {
+        <label>Max participants <span class="muted small">(≤ Σ ёмкостей точек; пусто = без лимита)</span>
+            <input type="number" min="0" asp-for="Input.MaxParticipants" />
+        </label>
+    }
 
     <div class="actions">
         <button type="submit" class="btn-primary">@(Model.IsNew ? "Create session" : "Save changes")</button>
