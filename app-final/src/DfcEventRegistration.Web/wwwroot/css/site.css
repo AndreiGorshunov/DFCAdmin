@@ -129,3 +129,44 @@ table.grid tfoot td { font-weight: 600; background: #f6f7f9; }
     border: 1px solid var(--line);
     border-radius: 6px;
 }
+
+/* Participant-type badges (quick visual: who is self/adult vs child) */
+.badge.self  { background: var(--accent-bg); color: var(--accent); }
+.badge.child { background: #fff3e0; color: #9a5b00; }
+.badge.full  { background: #ffe3ec; color: #b00043; border: 1px solid #f5a8c4; }
+
+/* Compact exact-ref search (reg # / QR) next to the wide person search */
+.filters input.ref-search { min-width: 150px; max-width: 180px; }
+
+/* Grouped filter bar: search + actions on top, dropdowns grouped below */
+.filters.filter-bar { flex-direction: column; align-items: stretch; gap: 0.75rem; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.filter-row.controls { gap: 0.6rem 1rem; }
+.filter-actions { display: flex; gap: 0.5rem; align-items: center; margin-left: auto; }
+.filter-field {
+    display: flex; flex-direction: column; gap: 0.15rem;
+    font-size: 0.7rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.03em;
+}
+.filter-field select { font-size: 0.9rem; text-transform: none; letter-spacing: 0; }
+
+/* Export dropdown — tucked away so it isn't intrusive */
+.export-menu { position: relative; }
+.export-menu > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    padding: 0.45rem 0.8rem; border: 1px solid var(--line); border-radius: 6px;
+    background: #fff; color: var(--fg); font-size: 0.9rem;
+}
+.export-menu > summary::-webkit-details-marker { display: none; }
+.export-menu[open] > summary { border-color: var(--accent); color: var(--accent); }
+.export-pop {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+    background: #fff; border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.10); padding: 0.4rem; min-width: 230px;
+    display: flex; flex-direction: column; gap: 0.2rem;
+}
+.export-pop a {
+    display: block; padding: 0.5rem 0.6rem; border-radius: 6px;
+    text-decoration: none; color: var(--fg); font-size: 0.88rem;
+}
+.export-pop a:hover { background: var(--accent-bg); color: var(--accent); }

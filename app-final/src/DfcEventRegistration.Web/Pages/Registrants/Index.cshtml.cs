@@ -23,6 +23,7 @@ public class IndexModel : PageModel
 
     // --- Фильтры / сортировка ---
     [BindProperty(SupportsGet = true)] public string? Q { get; set; }
+    [BindProperty(SupportsGet = true)] public string? Ref { get; set; }   // поиск по № регистрации / QR-коду
     [BindProperty(SupportsGet = true)] public Guid? EventId { get; set; }
     [BindProperty(SupportsGet = true)] public RegistrationStatus? Status { get; set; }
     [BindProperty(SupportsGet = true)] public ParticipantKind? ParticipantType { get; set; }
@@ -113,7 +114,7 @@ public class IndexModel : PageModel
             $"registrants_all_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
     }
 
-    private RegistrantFilter Filter() => new() { Q = Q, EventId = EventId, Status = Status, ParticipantType = ParticipantType, SessionId = SessionId, StartPointId = StartPointId };
+    private RegistrantFilter Filter() => new() { Q = Q, Ref = Ref, EventId = EventId, Status = Status, ParticipantType = ParticipantType, SessionId = SessionId, StartPointId = StartPointId };
 
     private bool IsDefaultOrder()
     {

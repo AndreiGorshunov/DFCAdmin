@@ -36,6 +36,7 @@
             @if (!string.IsNullOrEmpty(Model.QrCode)) { <text> · QR: <code>@Model.QrCode</code></text> }
         </p>
         <p class="muted small">Checking in a session checks in the <strong>whole registration</strong> — the registrant and the children on it.</p>
+        <p><a class="btn-secondary" asp-page="/Registrants/Details" asp-route-id="@Model.RegistrationId">Open registration ↗</a></p>
 
         <table class="grid">
             <thead><tr><th>Session</th><th>Start point</th><th>Time</th><th>Checked in</th><th></th></tr></thead>
@@ -73,7 +74,8 @@
             </tbody>
         </table>
 
-        <h3>Walk-up: assign a start point</h3>
+        <h3>Walk-up: add a session &amp; start point</h3>
+        <p class="muted small">Pick a session and its start point — this adds the session to the registration and checks the whole party in.</p>
         @if (Model.StartPointOptions.Count == 0)
         {
             <p class="muted">No more sessions to assign (all already selected, or none defined for this event).</p>

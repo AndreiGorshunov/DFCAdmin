@@ -1,5 +1,4 @@
 using DfcEventRegistration.Web.Data;
-using DfcEventRegistration.Web.Models;
 using DfcEventRegistration.Web.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -8,27 +7,27 @@ using Microsoft.EntityFrameworkCore;
 namespace DfcEventRegistration.Web.Pages.StartPoints;
 
 /// <summary>
-/// Просмотр регистрантов конкретной точки старта + стандартный поиск (Q: email/имя/фамилия/телефон,
-/// та же маршрутизация, что и на /Registrants) и фильтр по статусу. Грейн = регистрация
-/// (одна строка на регистрацию). Под /StartPoints -> политика CanManage (Admin); партнёр/стюард
-/// могут фильтровать по точке на /Registrants. Листинг ограничен ёмкостью точки, поэтому без пейджинга.
+/// Регистранты конкретной точки старта + поиск (Q: email/имя/фамилия/телефон, как на /Registrants)
+/// и фильтр по статусу. Грейн = регистрация (строка RegistrationSessions этой точки). Колонка
+/// «Checked in here» = чек-ин ИМЕННО на этой точке. Пагинация offset с теми же размерами страниц,
+/// что и на /Registrants (точка ограничена ёмкостью, объёмы небольшие). Под /StartPoints -> Admin.
 /// </summary>
 public class DetailsModel : PageModel
 {
     private readonly AppDbContext _db;
-    private readonly RegistrantQueryService _svc;
+    private readonly UserSearchService _search;
 
-    public DetailsModel(AppDbContext db, RegistrantQueryService svc)
+    public DetailsModel(AppDbContext db, UserSearchService search)
     {
         _db = db;
-        _svc = svc;
+        _search = search;
     }
 
     [BindProperty(SupportsGet = true)] public int StartPointId { get; set; }
     [BindProperty(SupportsGet = true)] public string? Q { get; set; }
     [BindProperty(SupportsGet = true)] public RegistrationStatus? Status { get; set; }
-
-    private const int Cap = 1000;
+    [BindProperty(SupportsGet = true)] public int PageSize { get; set; } = 25;
+    [BindProperty(SupportsGet = true)] public int PageNo { get; set; } = 1;
 
     public string StartPointName { get; private set; } = "";
     public string SessionName { get; private set; } = "";
@@ -38,13 +37,23 @@ public class DetailsModel : PageModel
     public TimeOnly? EndTime { get; private set; }
     public int? Capacity { get; private set; }
     public int Occupied { get; private set; }
-    public int? Remaining => Capacity is int c ? c - Occupied : null;
+    public int CheckedInHereCount { get; private set; }
 
-    public IReadOnlyList<RegistrantRow> Rows { get; private set; } = Array.Empty<RegistrantRow>();
-    public bool Capped { get; private set; }
+    public bool IsFull => Capacity is int c && Occupied >= c;
+    public int? Free => Capacity is int c ? Math.Max(0, c - Occupied) : null;
+
+    public record Row(long RegistrationId, string Email, string FirstName, string LastName,
+        RegistrationStatus Status, bool CheckedInHere, DateTime? CheckInTime);
+
+    public IReadOnlyList<Row> Rows { get; private set; } = Array.Empty<Row>();
+    public int Total { get; private set; }
+    public int TotalPages => PageSize > 0 ? (int)Math.Ceiling(Total / (double)PageSize) : 0;
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
+        PageSize = Math.Clamp(PageSize, 10, 200);
+        if (PageNo < 1) PageNo = 1;
+
         var sp = await _db.EventStartPoints.AsNoTracking()
             .Where(p => p.StartPointId == StartPointId)
             .Select(p => new
@@ -63,12 +72,33 @@ public class DetailsModel : PageModel
         EndTime = sp.EndTime;
         Capacity = sp.Capacity;
         Occupied = await _db.RegistrationSessions.CountAsync(rs => rs.StartPointId == StartPointId, ct);
+        CheckedInHereCount = await _db.RegistrationSessions.CountAsync(rs => rs.StartPointId == StartPointId && rs.CheckedIn, ct);
 
-        // Переиспользуем поиск регистрантов: фильтр зафиксирован на этой точке старта.
-        var filter = new RegistrantFilter { StartPointId = StartPointId, Q = Q, Status = Status };
-        var rows = await _svc.ApplySort(_svc.Query(filter), null, null).Take(Cap + 1).ToListAsync(ct);
-        Capped = rows.Count > Cap;
-        Rows = Capped ? rows.Take(Cap).ToList() : rows;
+        var q = _db.RegistrationSessions.AsNoTracking().Where(rs => rs.StartPointId == StartPointId);
+
+        if (Status is RegistrationStatus st)
+            q = q.Where(rs => rs.Registration.Status == st);
+
+        if (!string.IsNullOrWhiteSpace(Q))
+        {
+            var ids = _search.MatchUserIds(Q.Trim());   // та же маршрутизация email/имя/телефон, что и на /Registrants
+            q = q.Where(rs => ids.Contains(rs.Registration.UserId));
+        }
+
+        Total = await q.CountAsync(ct);
+
+        Rows = await q
+            .OrderBy(rs => rs.Registration.RegistrantLastName).ThenBy(rs => rs.RegistrationId)
+            .Skip((PageNo - 1) * PageSize).Take(PageSize)
+            .Select(rs => new Row(
+                rs.RegistrationId,
+                rs.Registration.User.Email,
+                rs.Registration.User.FirstName,
+                rs.Registration.RegistrantLastName,
+                rs.Registration.Status,
+                rs.CheckedIn,
+                rs.CheckInTime))
+            .ToListAsync(ct);
 
         return Page();
     }

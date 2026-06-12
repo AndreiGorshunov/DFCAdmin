@@ -24,6 +24,10 @@ public class RegistrantRow
 public class RegistrantFilter
 {
     public string? Q { get; set; }
+
+    /// <summary>Точный поиск по номеру регистрации и/или QR-коду (отдельно от Q по персоне).</summary>
+    public string? Ref { get; set; }
+
     public Guid? EventId { get; set; }
     public RegistrationStatus? Status { get; set; }
 

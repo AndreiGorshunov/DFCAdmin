@@ -7,6 +7,7 @@
 
     var baseRoute = new Dictionary<string, string>();
     if (!string.IsNullOrWhiteSpace(Model.Q)) baseRoute["Q"] = Model.Q!;
+    if (!string.IsNullOrWhiteSpace(Model.Ref)) baseRoute["Ref"] = Model.Ref!;
     if (Model.EventId is Guid ev) baseRoute["EventId"] = ev.ToString();
     if (Model.SessionId is int sid) baseRoute["SessionId"] = sid.ToString();
     if (Model.StartPointId is int spid) baseRoute["StartPointId"] = spid.ToString();
@@ -35,6 +36,7 @@
 
     // Подтверждение для полной выгрузки: текст зависит от того, выбраны ли фильтры.
     bool anyFilter = !string.IsNullOrWhiteSpace(Model.Q)
+        || !string.IsNullOrWhiteSpace(Model.Ref)
         || Model.EventId is not null
         || Model.SessionId is not null
         || Model.StartPointId is not null
@@ -52,65 +54,88 @@
     <div class="flash ok">@Model.Notice</div>
 }
 
-<form method="get" class="filters">
-    <input type="text" name="Q" value="@Model.Q" placeholder="Email / name / phone…" />
+<form method="get" class="filters filter-bar">
+    <div class="filter-row">
+        <input type="text" name="Q" value="@Model.Q" placeholder="Email / name / phone…" />
+        <input type="text" name="Ref" value="@Model.Ref" class="ref-search" placeholder="Reg. # or QR" title="Exact registration number and/or QR code" />
+        <div class="filter-actions">
+            <button type="submit">Apply</button>
+            <a class="btn-secondary" asp-page="/Registrants/Index">Reset</a>
+            <button type="button" id="countBtn" class="btn-secondary">Count ▷</button>
+            <details class="export-menu">
+                <summary>Export ▾</summary>
+                <div class="export-pop">
+                    <a asp-page="/Registrants/Index" asp-page-handler="Export"
+                       asp-all-route-data="exportRoute" title="Quick export, capped at 100k rows, single sheet">⬇ Excel (≤100k rows)</a>
+                    <a asp-page="/Registrants/Index" asp-page-handler="ExportAllCsv"
+                       asp-all-route-data="exportRoute" title="All rows, streamed, no limit (recommended)"
+                       onclick="return confirm('@exportConfirm');">⬇ Export all — CSV</a>
+                    <a asp-page="/Registrants/Index" asp-page-handler="ExportAllXlsx"
+                       asp-all-route-data="exportRoute" title="All rows, streamed into one .xlsx (~1M per sheet)"
+                       onclick="return confirm('@exportConfirm');">⬇ Export all — Excel</a>
+                </div>
+            </details>
+        </div>
+    </div>
 
-    <select name="EventId" onchange="this.form.submit()">
-        <option value="">— All events —</option>
-        @foreach (var e in Model.Events)
-        {
-            <option value="@e.Id" selected="@(Model.EventId == e.Id)">@e.Name</option>
-        }
-    </select>
+    <div class="filter-row controls">
+        <label class="filter-field">Event
+            <select name="EventId" onchange="this.form.submit()">
+                <option value="">— All events —</option>
+                @foreach (var e in Model.Events)
+                {
+                    <option value="@e.Id" selected="@(Model.EventId == e.Id)">@e.Name</option>
+                }
+            </select>
+        </label>
 
-    <select name="SessionId" onchange="this.form.submit()" title="Select an event to choose a session">
-        <option value="">— All sessions —</option>
-        @foreach (var s in Model.Sessions)
-        {
-            <option value="@s.Id" selected="@(Model.SessionId == s.Id)">@s.Name</option>
-        }
-    </select>
+        <label class="filter-field">Session
+            <select name="SessionId" onchange="this.form.submit()" title="Select an event to choose a session">
+                <option value="">— All sessions —</option>
+                @foreach (var s in Model.Sessions)
+                {
+                    <option value="@s.Id" selected="@(Model.SessionId == s.Id)">@s.Name</option>
+                }
+            </select>
+        </label>
 
-    <select name="StartPointId" title="Select a session to choose a start point">
-        <option value="">— All start points —</option>
-        @foreach (var sp in Model.StartPoints)
-        {
-            <option value="@sp.Id" selected="@(Model.StartPointId == sp.Id)">@sp.Name</option>
-        }
-    </select>
+        <label class="filter-field">Start point
+            <select name="StartPointId" title="Select a session to choose a start point">
+                <option value="">— All start points —</option>
+                @foreach (var sp in Model.StartPoints)
+                {
+                    <option value="@sp.Id" selected="@(Model.StartPointId == sp.Id)">@sp.Name</option>
+                }
+            </select>
+        </label>
 
-    <select name="Status">
-        <option value="">— Any status —</option>
-        @foreach (RegistrationStatus s in Enum.GetValues<RegistrationStatus>())
-        {
-            <option value="@s" selected="@(Model.Status == s)">@s</option>
-        }
-    </select>
+        <label class="filter-field">Status
+            <select name="Status">
+                <option value="">— Any status —</option>
+                @foreach (RegistrationStatus s in Enum.GetValues<RegistrationStatus>())
+                {
+                    <option value="@s" selected="@(Model.Status == s)">@s</option>
+                }
+            </select>
+        </label>
 
-    <select name="ParticipantType">
-        <option value="">— Adults &amp; children —</option>
-        <option value="Adults" selected="@(Model.ParticipantType == ParticipantKind.Adults)">No children</option>
-        <option value="Children" selected="@(Model.ParticipantType == ParticipantKind.Children)">With children</option>
-    </select>
+        <label class="filter-field">Participants
+            <select name="ParticipantType">
+                <option value="">— Adults &amp; children —</option>
+                <option value="Adults" selected="@(Model.ParticipantType == ParticipantKind.Adults)">No children</option>
+                <option value="Children" selected="@(Model.ParticipantType == ParticipantKind.Children)">With children</option>
+            </select>
+        </label>
 
-    <select name="PageSize">
-        @foreach (var n in new[] { 25, 50, 100, 200 })
-        {
-            <option value="@n" selected="@(Model.PageSize == n)">@n / page</option>
-        }
-    </select>
-
-    <button type="submit">Apply</button>
-    <a class="btn-secondary" asp-page="/Registrants/Index">Reset</a>
-    <button type="button" id="countBtn" class="btn-secondary">Count ▷</button>
-    <a class="btn-export" asp-page="/Registrants/Index" asp-page-handler="Export"
-       asp-all-route-data="exportRoute" title="Quick export, capped at 100k rows, single sheet">⬇ Excel (≤100k)</a>
-    <a class="btn-export" asp-page="/Registrants/Index" asp-page-handler="ExportAllCsv"
-       asp-all-route-data="exportRoute" title="All rows, streamed, no limit (recommended)"
-       onclick="return confirm('@exportConfirm');">⬇ Export all (CSV)</a>
-    <a class="btn-export" asp-page="/Registrants/Index" asp-page-handler="ExportAllXlsx"
-       asp-all-route-data="exportRoute" title="All rows, streamed into one .xlsx (~1M per sheet)"
-       onclick="return confirm('@exportConfirm');">⬇ Export all (Excel)</a>
+        <label class="filter-field">Page size
+            <select name="PageSize">
+                @foreach (var n in new[] { 25, 50, 100, 200 })
+                {
+                    <option value="@n" selected="@(Model.PageSize == n)">@n / page</option>
+                }
+            </select>
+        </label>
+    </div>
 </form>
 
 <p class="muted" id="countResult" aria-live="polite"></p>
@@ -133,7 +158,7 @@ else
             <th>Mobile</th>
             <th><a asp-page="/Registrants/Index" asp-all-route-data="sortGroup">Group@(Model.SortIndicator("groupcode"))</a></th>
             <th><a asp-page="/Registrants/Index" asp-all-route-data="sortEvent">Event@(Model.SortIndicator("event"))</a></th>
-            <th><a asp-page="/Registrants/Index" asp-all-route-data="sortChecked">Checked-in@(Model.SortIndicator("checkedin"))</a></th>
+            <th><a asp-page="/Registrants/Index" asp-all-route-data="sortChecked">Checked in (venue)@(Model.SortIndicator("checkedin"))</a></th>
             <th class="num">Kids &lt;13</th>
             <th class="num">Kids ≥13</th>
             <th></th>
@@ -214,12 +239,14 @@ else if (Model.TotalPages > 1)
 
         // Берём ТЕКУЩИЕ значения формы (даже если фильтр ещё не "применён").
         var q = form.querySelector('[name="Q"]').value.trim();
+        var refv = form.querySelector('[name="Ref"]').value.trim();
         var eventId = form.querySelector('[name="EventId"]').value;
         var status = form.querySelector('[name="Status"]').value;
         var ptype = form.querySelector('[name="ParticipantType"]').value;
         var sessionId = form.querySelector('[name="SessionId"]').value;
         var startPointId = form.querySelector('[name="StartPointId"]').value;
         if (q) params.set('Q', q);
+        if (refv) params.set('Ref', refv);
         if (eventId) params.set('EventId', eventId);
         if (sessionId) params.set('SessionId', sessionId);
         if (startPointId) params.set('StartPointId', startPointId);

@@ -52,6 +52,14 @@ public class RegistrantQueryService
             q = q.Where(r => userIds.Contains(r.UserId));
         }
 
+        // Точный поиск по номеру регистрации и/или QR-коду (независимо от Q по персоне).
+        if (!string.IsNullOrWhiteSpace(f.Ref))
+        {
+            var refv = f.Ref.Trim();
+            long? refId = long.TryParse(refv, out var n) ? n : null;
+            q = q.Where(r => r.QRCode == refv || (refId != null && r.RegistrationId == refId));
+        }
+
         return q;
     }
 

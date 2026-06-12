@@ -3,6 +3,11 @@
 @using DfcEventRegistration.Web.Data
 @{
     ViewData["Title"] = "Start point registrants";
+
+    var baseRoute = new Dictionary<string, string> { ["startPointId"] = Model.StartPointId.ToString() };
+    if (!string.IsNullOrWhiteSpace(Model.Q)) baseRoute["Q"] = Model.Q!;
+    if (Model.Status is RegistrationStatus st) baseRoute["Status"] = st.ToString();
+    baseRoute["PageSize"] = Model.PageSize.ToString();
 }
 
 <p class="muted"><a asp-page="/StartPoints/Index" asp-route-sessionId="@Model.SessionId">‹ Back to start points</a></p>
@@ -13,7 +18,25 @@
         <tbody>
             <tr><th>Time</th><td>@(Model.StartTime?.ToString("HH\\:mm") ?? "—")@(Model.EndTime is null ? "" : "–" + Model.EndTime.Value.ToString("HH\\:mm"))</td></tr>
             <tr><th>Capacity</th><td>@(Model.Capacity?.ToString("N0") ?? "— (unlimited)")</td></tr>
-            <tr><th>Assigned</th><td>@Model.Occupied.ToString("N0")@(Model.Remaining is int rem ? $" · {rem:N0} free" : "")</td></tr>
+            <tr>
+                <th>Assigned</th>
+                <td>
+                    @if (Model.Capacity is null)
+                    {
+                        <text>@Model.Occupied.ToString("N0") (unlimited)</text>
+                    }
+                    else if (Model.IsFull)
+                    {
+                        <text>@Model.Occupied.ToString("N0") / @Model.Capacity.Value.ToString("N0") </text>
+                        <span class="badge full">Full</span>
+                    }
+                    else
+                    {
+                        <text>@Model.Occupied.ToString("N0") / @Model.Capacity.Value.ToString("N0") · @Model.Free!.Value.ToString("N0") free</text>
+                    }
+                </td>
+            </tr>
+            <tr><th>Checked in here</th><td>@Model.CheckedInHereCount.ToString("N0") / @Model.Occupied.ToString("N0")</td></tr>
         </tbody>
     </table>
 </div>
@@ -28,40 +51,64 @@
             <option value="@s" selected="@(Model.Status == s)">@s</option>
         }
     </select>
+    <select name="PageSize">
+        @foreach (var n in new[] { 25, 50, 100, 200 })
+        {
+            <option value="@n" selected="@(Model.PageSize == n)">@n / page</option>
+        }
+    </select>
     <button type="submit">Apply</button>
     <a class="btn-secondary" asp-page="/StartPoints/Details" asp-route-startPointId="@Model.StartPointId">Reset</a>
 </form>
 
-@if (Model.Capped)
-{
-    <p class="muted">Showing the first 1,000 matches.</p>
-}
+<p class="muted">Found <strong>@Model.Total.ToString("N0")</strong> registrant(s) at this start point.</p>
 
 <table class="grid">
     <thead>
-        <tr>
-            <th>Email</th><th>First name</th><th>Last name</th><th>Mobile</th><th>Group</th>
-            <th>Reg. status</th><th class="num">Kids &lt;13</th><th class="num">Kids ≥13</th><th></th>
-        </tr>
+        <tr><th>Last name</th><th>First name</th><th>Email</th><th>Checked in here</th><th>Reg. status</th><th></th></tr>
     </thead>
     <tbody>
         @if (Model.Rows.Count == 0)
         {
-            <tr><td colspan="9" class="muted center">No registrants assigned to this start point match the filters.</td></tr>
+            <tr><td colspan="6" class="muted center">No registrants assigned to this start point match the filters.</td></tr>
         }
         @foreach (var r in Model.Rows)
         {
             <tr>
-                <td>@r.Email</td>
-                <td>@r.FirstName</td>
                 <td>@r.LastName</td>
-                <td>@r.Mobile</td>
-                <td>@r.GroupCode</td>
+                <td>@r.FirstName</td>
+                <td>@r.Email</td>
+                <td>
+                    @if (r.CheckedInHere)
+                    {
+                        <span class="badge yes">Yes</span>
+                        @if (r.CheckInTime is not null) { <span class="muted small"> @r.CheckInTime.Value.ToString("HH:mm")</span> }
+                    }
+                    else
+                    {
+                        <span class="badge no">No</span>
+                    }
+                </td>
                 <td>@r.Status</td>
-                <td class="num">@r.KidsBelow13</td>
-                <td class="num">@r.KidsAbove13</td>
                 <td><a asp-page="/Registrants/Edit" asp-route-id="@r.RegistrationId">Edit</a></td>
             </tr>
         }
     </tbody>
 </table>
+
+@if (Model.TotalPages > 1)
+{
+    var prevRoute = new Dictionary<string, string>(baseRoute) { ["PageNo"] = (Model.PageNo - 1).ToString() };
+    var nextRoute = new Dictionary<string, string>(baseRoute) { ["PageNo"] = (Model.PageNo + 1).ToString() };
+    <div class="pager">
+        @if (Model.PageNo > 1)
+        {
+            <a asp-page="/StartPoints/Details" asp-all-route-data="prevRoute">‹ Prev</a>
+        }
+        <span>Page @Model.PageNo of @Model.TotalPages</span>
+        @if (Model.PageNo < Model.TotalPages)
+        {
+            <a asp-page="/StartPoints/Details" asp-all-route-data="nextRoute">Next ›</a>
+        }
+    </div>
+}

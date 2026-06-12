@@ -1,4 +1,6 @@
+using DfcEventRegistration.Web.Auth;
 using DfcEventRegistration.Web.Data;
+using DfcEventRegistration.Web.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -14,9 +16,19 @@ namespace DfcEventRegistration.Web.Pages.Registrants;
 public class DetailsModel : PageModel
 {
     private readonly AppDbContext _db;
-    public DetailsModel(AppDbContext db) => _db = db;
+    private readonly AdminWriteService _write;
+    public DetailsModel(AppDbContext db, AdminWriteService write)
+    {
+        _db = db;
+        _write = write;
+    }
 
     [BindProperty(SupportsGet = true)] public long Id { get; set; }   // RegistrationId
+
+    [TempData] public string? Notice { get; set; }
+
+    // Стьюард/админ могут чек-инить прямо отсюда (CanCheckIn = Admin + Steward); партнёр — нет.
+    public bool CanCheckIn => User.IsInRole(Roles.Admin) || User.IsInRole(Roles.Steward);
 
     public string EventName { get; private set; } = "";
     public Guid EventId { get; private set; }
@@ -24,7 +36,7 @@ public class DetailsModel : PageModel
 
     public IReadOnlyList<SessionChoiceRow> SessionChoices { get; private set; } = Array.Empty<SessionChoiceRow>();
 
-    public record SessionChoiceRow(string SessionName, string StartPointName,
+    public record SessionChoiceRow(long RegistrationSessionId, string SessionName, string StartPointName,
         TimeOnly? StartTime, TimeOnly? EndTime, bool CheckedIn, DateTime? CheckInTime);
 
     public PersonView Person { get; private set; } = new();
@@ -111,10 +123,20 @@ public class DetailsModel : PageModel
             .Where(rs => rs.RegistrationId == Id)
             .OrderBy(rs => rs.Session.Name).ThenBy(rs => rs.StartPoint.DisplayOrder)
             .Select(rs => new SessionChoiceRow(
-                rs.Session.Name, rs.StartPoint.Name, rs.StartPoint.StartTime, rs.StartPoint.EndTime,
+                rs.RegistrationSessionId, rs.Session.Name, rs.StartPoint.Name, rs.StartPoint.StartTime, rs.StartPoint.EndTime,
                 rs.CheckedIn, rs.CheckInTime))
             .ToListAsync(ct);
 
         return Page();
+    }
+
+    /// <summary>Чек-ин/снятие прямо из просмотра — для стьюарда/админа (CanCheckIn).
+    /// Страница под CanView, поэтому хендлер явно проверяет роль: партнёр не пройдёт даже сырым POST.</summary>
+    public async Task<IActionResult> OnPostSetSessionCheckedInAsync(long registrationSessionId, bool checkedIn, CancellationToken ct)
+    {
+        if (!CanCheckIn) return Forbid();
+        await _write.SetSessionCheckedInAsync(registrationSessionId, checkedIn, ct);
+        Notice = checkedIn ? "Checked in." : "Check-in undone.";
+        return RedirectToPage(new { Id });
     }
 }

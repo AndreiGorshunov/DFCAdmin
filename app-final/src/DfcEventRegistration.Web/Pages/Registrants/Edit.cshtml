@@ -77,7 +77,16 @@
             {
                 <tr>
                     <td>@(p.IsSelf ? "Registrant (self)" : p.Name)</td>
-                    <td>@(p.IsSelf ? "Self" : "Child")</td>
+                    <td>
+                        @if (p.IsSelf)
+                        {
+                            <span class="badge self">Self · adult</span>
+                        }
+                        else
+                        {
+                            <span class="badge child">Child</span>
+                        }
+                    </td>
                     <td>
                         <form method="post" asp-page-handler="SetTshirt" asp-route-id="@Model.Id" class="inline-form">
                             <input type="hidden" name="participantId" value="@p.ParticipantId" />

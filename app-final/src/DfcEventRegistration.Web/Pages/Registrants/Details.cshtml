@@ -34,6 +34,11 @@
     <p><a class="btn-secondary" asp-page="/Registrants/Edit" asp-route-id="@Model.Id">Edit</a></p>
 }
 
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="flash ok">@Model.Notice</div>
+}
+
 <!-- ============ Person (the registrant / parent) ============ -->
 <div class="card">
     <h2>Person <span class="muted small">(the registrant / parent)</span></h2>
@@ -68,7 +73,11 @@
 <!-- ============ Sessions & check-in ============ -->
 <div class="card">
     <h2>Sessions &amp; check-in</h2>
-    <p class="muted small">Sessions and start points this registration is assigned to, with check-in status.</p>
+    <p class="muted small">
+        Sessions and start points this registration is assigned to. Check-in applies to the
+        <strong>whole registration</strong> (registrant + children).
+        @if (Model.CanCheckIn) { <text>You can check in here — no need to open the Check-in screen.</text> }
+    </p>
     @if (Model.SessionChoices.Count == 0)
     {
         <p class="muted">No session selections.</p>
@@ -76,7 +85,7 @@
     else
     {
         <table class="grid">
-            <thead><tr><th>Session</th><th>Start point</th><th>Time</th><th>Checked in</th></tr></thead>
+            <thead><tr><th>Session</th><th>Start point</th><th>Time</th><th>Checked in</th>@if (Model.CanCheckIn) { <th></th> }</tr></thead>
             <tbody>
                 @foreach (var s in Model.SessionChoices)
                 {
@@ -84,7 +93,27 @@
                         <td><strong>@s.SessionName</strong></td>
                         <td>@s.StartPointName</td>
                         <td>@(s.StartTime?.ToString("HH\\:mm") ?? "—")@(s.EndTime is null ? "" : "–" + s.EndTime.Value.ToString("HH\\:mm"))</td>
-                        <td>@(s.CheckedIn ? ("Yes" + (s.CheckInTime is null ? "" : " · " + s.CheckInTime.Value.ToString("yyyy-MM-dd HH:mm"))) : "No")</td>
+                        <td>
+                            @if (s.CheckedIn)
+                            {
+                                <span class="badge yes">Yes</span>
+                                @if (s.CheckInTime is not null) { <span class="muted small"> @s.CheckInTime.Value.ToString("yyyy-MM-dd HH:mm")</span> }
+                            }
+                            else
+                            {
+                                <span class="badge no">No</span>
+                            }
+                        </td>
+                        @if (Model.CanCheckIn)
+                        {
+                            <td class="row-actions">
+                                <form method="post" asp-page-handler="SetSessionCheckedIn" asp-route-id="@Model.Id" class="inline-form">
+                                    <input type="hidden" name="registrationSessionId" value="@s.RegistrationSessionId" />
+                                    <input type="hidden" name="checkedIn" value="@((!s.CheckedIn).ToString().ToLowerInvariant())" />
+                                    <button type="submit" class="@(s.CheckedIn ? "btn-link" : "btn-primary")">@(s.CheckedIn ? "Undo" : "Check in")</button>
+                                </form>
+                            </td>
+                        }
                     </tr>
                 }
             </tbody>
@@ -107,7 +136,16 @@
             {
                 <tr>
                     <td>@(p.IsSelf ? "Registrant (self)" : p.Name)</td>
-                    <td>@(p.IsSelf ? "Self" : "Child")</td>
+                    <td>
+                        @if (p.IsSelf)
+                        {
+                            <span class="badge self">Self · adult</span>
+                        }
+                        else
+                        {
+                            <span class="badge child">Child</span>
+                        }
+                    </td>
                     <td>@(string.IsNullOrEmpty(p.TshirtSize) ? "—" : p.TshirtSize)</td>
                 </tr>
             }
